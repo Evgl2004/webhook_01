@@ -29,7 +29,8 @@ LOG_DIR.mkdir(exist_ok=True)
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-^kucsrh(6jzs1svn9wau(ymhuwupjmspea(cg^zp3#s6brv^@^'
+SECRET_KEY = getenv('SECRET_KEY', 'fallback-key-for-dev-only')
+REQUIRED_PASSWORD = getenv('WEBHOOK_PASSWORD', 'NoSecretPassword')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -90,7 +91,8 @@ DATABASES = {
         'NAME': getenv('DATABASES_NAME'),
         'USER': getenv('DATABASES_USER'),
         'PASSWORD': getenv('DATABASES_PASSWORD'),
-        'PORT': getenv('DATABASES_PORT'),
+        'HOST': getenv('DATABASES_HOST', 'localhost'),
+        'PORT': getenv('DATABASES_PORT', '5432'),
     }
 }
 
@@ -152,10 +154,10 @@ if CACHE_ENABLED:
 
 # URL-адрес брокера сообщений
 # Например, Redis, который по умолчанию работает на порту 6379
-CELERY_BROKER_URL = bool(getenv('CELERY_BROKER_URL'))
+CELERY_BROKER_URL = getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
 
 # URL-адрес брокера результатов, также Redis
-CELERY_RESULT_BACKEND = bool(getenv('CELERY_RESULT_BACKEND'))
+CELERY_RESULT_BACKEND = getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
 
 # Часовой пояс для работы Celery
 CELERY_TIMEZONE = 'Asia/Yekaterinburg'
@@ -217,9 +219,10 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.ScopedRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/hour',  # Общий лимит для анонимов
-        'user': '1000/hour',  # Общий лимит для пользователей
-        'webhook': '1000/hour',  # Специальный лимит для webhook
+        'anon': '50/hour',  # Общий лимит для анонимов
+        'user': '500/hour',  # Общий лимит для пользователей
+        'webhook': '500/hour',  # Специальный лимит для webhook
+        'healthcheck': '50/hour',  # Специальный лимит для healthcheck
         # 'high_frequency': '100/minute',  # Для частых запросов
     }
 }

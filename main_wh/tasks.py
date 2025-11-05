@@ -16,21 +16,25 @@ def process_webhook_notification(self, notification_id):
     Задача Celery для обработки одного уведомления
     """
     try:
-        notification = WebhookRequest.objects.get(id=notification_id)
-        WebhookProcessor.process_single_notification(notification)
+        try:
+            notification = WebhookRequest.objects.get(id=notification_id)
+            WebhookProcessor.process_single_notification(notification)
 
-        logger.info(f"Уведомление {notification_id} обработано через Celery")
-        return f"Уведомление {notification_id} обработано успешно!"
+            logger.info(f"Уведомление {notification_id} обработано через Celery")
+            return f"Уведомление {notification_id} обработано успешно!"
 
-    except WebhookRequest.DoesNotExist:
-        logger.error(f"Уведомление {notification_id} не найдено")
-        return f"Уведомление {notification_id} не найдено"
+        except WebhookRequest.DoesNotExist:
+            logger.error(f"Уведомление {notification_id} не найдено")
+            return f"Уведомление {notification_id} не найдено"
 
-    except Exception as err:
-        # Повторяем задачу через 60 секунд при ошибке
-        logger.error(f"Ошибка обработки уведомления {notification_id}: {str(err)}")
+        except Exception as err:
+            # Повторяем задачу через 60 секунд при ошибке
+            logger.error(f"Ошибка обработки уведомления {notification_id}: {str(err)}")
+            raise self.retry(countdown=60, exc=err)
+
+    except ConnectionError as err:
+        logger.error(f"Ошибка подключения к Redis: {err}")
         raise self.retry(countdown=60, exc=err)
-
 
 @shared_task
 def process_pending_notifications():

@@ -1,16 +1,19 @@
+from django.utils import timezone
+
 from rest_framework import status, generics
 from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
 
 from main_wh.models import WebhookRequest
 from main_wh.serializers import WebhookRequestSerializer
-from main_wh.permissions import WebhookPermission
+from main_wh.permissions import WebhookPermission, HealthCheckPermission
 from main_wh.utils import get_client_ip
 
 # Импортируем Celery задачу
 from main_wh.tasks import process_webhook_notification
 
 import logging
+logger = logging.getLogger(__name__)
 
 
 class WebhookRequestCreateAPIView(generics.CreateAPIView):
@@ -31,15 +34,19 @@ class WebhookRequestCreateAPIView(generics.CreateAPIView):
         Переопределяем метод создания записей для реализации задуманной логики
         """
         try:
+            # Проверка размера данных
+            if len(request.body) > 5000:  # Лимит из модели
+                return Response({
+                    "status": "error",
+                    "message": "Превышен допустимый размер данных"
+                }, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+
             # Извлечение полученных данных
-            # raw_body = request.body.decode('utf-8') if request.body else ''
             try:
                 raw_body = request.body.decode('utf-8')
             except (AttributeError, UnicodeDecodeError):
-                try:
-                    raw_body = request.body.decode('cp1251')  # Альтернативная кодировка
-                except (AttributeError, UnicodeDecodeError):
-                    raw_body = ''
+                # Для бинарных данных или других кодировок
+                raw_body = request.body.decode('utf-8', errors='replace')
 
             # Создание записи в протоколе
             notification = WebhookRequest.objects.create(
@@ -65,10 +72,33 @@ class WebhookRequestCreateAPIView(generics.CreateAPIView):
 
         except Exception as err:
             # Записываем в журнал ошибку, не пытаемся создавать уведомление об ошибке
-            logger = logging.getLogger(__name__)
             logger.error(f"Критическая ошибка при сохранении webhook: {str(err)}")
 
             return Response(
                 {"status": "error", "message": str(err)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class HealthCheckAPIView(generics.RetrieveAPIView):
+    """
+    Точка доступа для проверки отклика состояния системы (облеченный health-check).
+    Возвращает простой статус с timestamp.
+    """
+
+    # Отключаем аутентификацию для health-check
+    authentication_classes = []
+    # Ограничиваем только методом GET
+    permission_classes = [HealthCheckPermission]
+
+    # Используем отдельный лимит для health-check
+    throttle_scope = 'healthcheck'
+
+    def get(self, request, *args, **kwargs):
+        """
+        Простой health-check - всегда возвращает healthy
+        """
+        return Response({
+            "status": "healthy",
+            "timestamp": timezone.now().isoformat()
+        })

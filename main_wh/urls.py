@@ -1,15 +1,21 @@
 from django.urls import path
+from django.http import JsonResponse
+from django.utils import timezone
 from rest_framework.routers import DefaultRouter
 
 from main_wh.apps import MainWhConfig
-from main_wh.views import WebhookRequestCreateAPIView
+from main_wh.views import WebhookRequestCreateAPIView, HealthCheckAPIView
 
 app_name = MainWhConfig.name
 
 router = DefaultRouter()
 
 
+def health_check(request):
+    return JsonResponse({"status": "healthy", "timestamp": timezone.now().isoformat()})
+
+
 urlpatterns = [
     path('webhooks/v1/phajA9JMvruP8bhJJQOYzs8vwKlFiX6f', WebhookRequestCreateAPIView.as_view(), name='webhook_create'),
-    # path('webhookrequest/create/', WebhookRequestCreateAPIView.as_view(), name='webhook_create'),
+    path('webhooks/v1/health', HealthCheckAPIView.as_view(), name='health_check'),
 ] + router.urls

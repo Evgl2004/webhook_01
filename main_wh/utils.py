@@ -2,6 +2,7 @@ import json
 import logging
 from django.utils import timezone
 from main_wh.models import WebhookRequest
+from config.settings import REQUIRED_PASSWORD
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +22,6 @@ def get_client_ip(request):
 
 class WebhookProcessor:
     """Базовый класс для обработки webhook - ВСЯ логика в фоне"""
-
-    REQUIRED_PASSWORD = "T123456t"
 
     @classmethod
     def parse_notification_data(cls, notification):
@@ -51,7 +50,7 @@ class WebhookProcessor:
 
         for field in password_fields:
             password = parsed_data.get(field)
-            if password and password == cls.REQUIRED_PASSWORD:
+            if password and password == REQUIRED_PASSWORD:
                 return True
 
         return False
@@ -281,10 +280,12 @@ class WebhookProcessor:
 
         logger.info(f"Начало обработки {total_count} ожидающих уведомлений")
 
+        # Ограничение на batch processing
+        batch_size = 100
         processed_count = 0
         error_count = 0
 
-        for notification in pending_notifications:
+        for notification in pending_notifications[:batch_size]:
             try:
                 cls.process_single_notification(notification)
                 processed_count += 1
