@@ -10,6 +10,6 @@ router = DefaultRouter()
 
 
 urlpatterns = [
-    path('webhooks/v1/phajA9JMvruP8bhJJQOYzs8vwKlFiX6f/', WebhookRequestCreateAPIView.as_view(), name='webhook_create'),
+    path('webhooks/v1/phajA9JMvruP8bhJJQOYzs8vwKlFiX6f', WebhookRequestCreateAPIView.as_view(), name='webhook_create'),
     # path('webhookrequest/create/', WebhookRequestCreateAPIView.as_view(), name='webhook_create'),
 ] + router.urls
