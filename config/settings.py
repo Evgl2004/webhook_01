@@ -11,16 +11,26 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from os import getenv
+from dotenv import load_dotenv
+from celery.schedules import crontab
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR / '.env')
+
+# Создаем папку для логов, если она не существует
+LOG_DIR = BASE_DIR / 'logs'
+LOG_DIR.mkdir(exist_ok=True)
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-^kucsrh(6jzs1svn9wau(ymhuwupjmspea(cg^zp3#s6brv^@^'
+SECRET_KEY = getenv('SECRET_KEY', 'fallback-key-for-dev-only')
+REQUIRED_PASSWORD = getenv('WEBHOOK_PASSWORD', 'NoSecretPassword')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -37,6 +47,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    'main_wh',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
@@ -74,8 +87,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': getenv('DATABASES_NAME'),
+        'USER': getenv('DATABASES_USER'),
+        'PASSWORD': getenv('DATABASES_PASSWORD'),
+        'HOST': getenv('DATABASES_HOST', 'localhost'),
+        'PORT': getenv('DATABASES_PORT', '5432'),
     }
 }
 
@@ -120,3 +137,225 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Настройки кэша через Redis:
+CACHE_ENABLED = bool(getenv('CACHE_ENABLED'))
+
+if CACHE_ENABLED:
+    CACHES = {
+        'default': {
+            'BACKEND': "django.core.cache.backends.redis.RedisCache",
+            'LOCATION': getenv('CACHE_LOCATION'),
+            'TIMEOUT': 300,  # Ручная регулировка времени жизни кеша в секундах, по умолчанию 300
+        }
+    }
+
+# Настройки для Celery
+
+# URL-адрес брокера сообщений
+# Например, Redis, который по умолчанию работает на порту 6379
+CELERY_BROKER_URL = getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+
+# URL-адрес брокера результатов, также Redis
+CELERY_RESULT_BACKEND = getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+
+# Часовой пояс для работы Celery
+CELERY_TIMEZONE = 'Asia/Yekaterinburg'
+
+# Флаг отслеживания выполнения задач
+CELERY_TASK_TRACK_STARTED = True
+
+# Максимальное время на выполнение задачи
+CELERY_TASK_TIME_LIMIT = 1 * 60  # Это максимальное время (в секундах), которое может выполняться задача.
+
+# Celery будет принимать задачи только в формате JSON
+CELERY_ACCEPT_CONTENT = ['json']
+
+# Все параметры задачи (аргументы, метаданные) будут преобразованы в JSON перед отправкой в брокер Redis.
+CELERY_TASK_SERIALIZER = 'json'
+
+# Когда задача завершается, её результат (например, число, строка, словарь) сохраняется в Redis в формате JSON.
+CELERY_RESULT_SERIALIZER = 'json'
+
+# Настройки для Celery
+CELERY_BEAT_SCHEDULE = {
+    # Обработка всех ожидающих уведомлений со статусом 'новый'
+    'process-pending-notifications': {
+        'task': 'main_wh.tasks.process_pending_notifications',
+        'schedule': 300.0,  # Каждые 5 минут
+    },
+    # Повторная обработки уведомлений со статусом 'ошибка' каждый день в 2:00
+    'retry-failed-notifications': {
+        'task': 'main_wh.tasks.retry_failed_notifications',
+        'schedule': crontab(hour=2, minute=0),
+    },
+    # Очистка старых записей каждый день в 4:00
+    'cleanup-old-notifications': {
+        'task': 'main_wh.tasks.cleanup_old_notifications',
+        'schedule': crontab(hour=4, minute=0),
+    },
+}
+
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticatedOrReadOnly',
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
+    ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
+    # НАСТРОЙКИ RATE LIMITING - Ограничение частоты запросов
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '50/hour',  # Общий лимит для анонимов
+        'user': '500/hour',  # Общий лимит для пользователей
+        'webhook': '500/hour',  # Специальный лимит для webhook
+        'healthcheck': '50/hour',  # Специальный лимит для healthcheck
+        # 'high_frequency': '100/minute',  # Для частых запросов
+    }
+}
+
+LOGGING = {
+    'version': 1,
+
+    # не отключает логгеры, созданные до загрузки этой конфигурации
+    'disable_existing_loggers': False,
+
+    # Определяют формат вывода логов:
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {asctime} {message}',
+            'style': '{',
+        },
+        'detailed': {
+            'format': '{levelname} {asctime} {pathname}:{lineno} {module} {funcName} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+    },
+    # Отборы
+    'filters': {
+        # срабатывает когда DEBUG = False (приложение завершило цикл разработки и находится в эксплуатации)
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+        # срабатывает когда DEBUG = True (разработка)
+        'require_debug_true': {
+            '()': 'django.utils.log.RequireDebugTrue',
+        },
+    },
+    # Обработчики, определяют куда и как писать логи
+    'handlers': {
+        # Файл для ВСЕХ логов Django (в режиме отладки)
+        'file_django_all': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': LOG_DIR / 'django_all.log',
+            'when': 'midnight',
+            'backupCount': 14,  # Увеличиваем до 14 дней
+            'formatter': 'detailed',
+            'filters': ['require_debug_true'],  # Только в режиме отладки
+        },
+        # Файл для ВСЕХ логов приложений (в режиме отладки)
+        'file_apps_all': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': LOG_DIR / 'apps_all.log',
+            'when': 'midnight',
+            'backupCount': 14,
+            'formatter': 'detailed',
+            'filters': ['require_debug_true'],  # Только в режиме отладки
+        },
+        # Файл для общих ошибок Django
+        'file_django_errors': {
+            # Только уровень сообщений типа ERROR и выше
+            'level': 'ERROR',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': LOG_DIR / 'django_errors.log',
+            'when': 'midnight',  # ротация каждый день в полночь
+            'backupCount': 7,    # хранить 7 дней
+            'formatter': 'verbose',
+        },
+        # Файл для ошибок приложений
+        'file_apps_errors': {
+            'level': 'ERROR',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': LOG_DIR / 'apps_errors.log',
+            'when': 'midnight',
+            'backupCount': 7,
+            'formatter': 'verbose',
+        },
+        # Файл для критических ошибок
+        'file_critical': {
+            'level': 'CRITICAL',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': LOG_DIR / 'critical.log',
+            'when': 'midnight',
+            'backupCount': 7,
+            'formatter': 'verbose',
+        },
+        # Консоль для разработки
+        'console': {
+            'level': 'DEBUG',
+            'filters': ['require_debug_true'],
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+        # Дополнительный файл для SQL-запросов (очень полезно при отладке)
+        # 'file_sql': {
+        #     'level': 'DEBUG',
+        #     'class': 'logging.handlers.TimedRotatingFileHandler',
+        #     'filename': LOG_DIR / 'sql_queries.log',
+        #     'when': 'midnight',
+        #     'backupCount': 7,
+        #     'formatter': 'simple',
+        #     'filters': ['require_debug_true'],
+        # },
+    },
+    'loggers': {
+        # Логгер для Django фреймворка - теперь пишем ВСЕ в режиме отладки
+        'django': {
+            'handlers': ['file_django_all', 'file_django_errors', 'console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        # # Логгер для SQL-запросов
+        # 'django.db.backends': {
+        #     'handlers': ['file_sql', 'console'],
+        #     'level': 'DEBUG',
+        #     'propagate': False,
+        # },
+        # Логгер приложения main_wh
+        'main_wh': {
+            'handlers': ['file_apps_all', 'file_apps_errors', 'console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        # Логгер для других приложений
+        'apps': {
+            'handlers': ['file_apps_all', 'file_apps_errors', 'console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        # Корневой логгер
+        '': {
+            'handlers': ['file_apps_all', 'file_apps_errors', 'console'],
+            'level': 'ERROR',
+        },
+    },
+}
