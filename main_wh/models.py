@@ -31,9 +31,10 @@ class WebhookRequest(models.Model):
     content_type = models.CharField(max_length=254, default='', verbose_name='Контент в заголовках')
 
     # Данные запроса
-    parsed_query = models.JSONField(default=dict, verbose_name='Разобранные параметры запроса')
+    parsed_body = models.JSONField(max_length=5000, validators=[MaxLengthValidator(5000)], default=dict,
+                                   verbose_name='Преобразованные данные')
     data = models.TextField(max_length=5000, validators=[MaxLengthValidator(5000)], default='',
-                            verbose_name='Тело запроса')
+                            verbose_name='Сырые данные')
 
     # Статус обработки
     status = models.CharField(max_length=20, choices=STATUS_REQUEST, default=STATUS_NEW,

@@ -53,7 +53,7 @@ class WebhookRequestCreateAPIView(generics.CreateAPIView):
                 path=request.path,
                 user_agent=request.META.get('HTTP_USER_AGENT', ''),
                 ip_adr=get_client_ip(request),
-                parsed_query=dict(request.query_params),
+                parsed_body=request.data if request.data else {},
                 data=raw_body,
                 status='new',
                 request_method=request.method,
