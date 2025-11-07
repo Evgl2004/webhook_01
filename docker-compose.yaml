@@ -35,8 +35,8 @@ services:
   migrate:
     build: .
     command: >
-      bash -c "echo 'Ожидаем запуск PostgreSQL 10с... Waiting for PostgreSQL...' &&
-               sleep 10 &&
+      bash -c "echo 'Ожидаем запуск PostgreSQL 20с... Waiting for PostgreSQL...' &&
+               sleep 20 &&
                python manage.py migrate"
     depends_on:
       db:
