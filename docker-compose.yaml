@@ -85,7 +85,8 @@ services:
     build: .
     env_file:
       - .env
-    command: celery -A config worker --loglevel=info --uid=app
+    command: celery -A config worker --loglevel=info
+    user: app
     volumes:
       - .:/app
       - logs_volume:/app/logs
@@ -104,7 +105,8 @@ services:
     build: .
     env_file:
       - .env
-    command: celery -A config beat --loglevel=info --uid=app
+    command: celery -A config beat --loglevel=info
+    user: app
     volumes:
       - .:/app
       - logs_volume:/app/logs
