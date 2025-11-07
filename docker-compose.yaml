@@ -64,9 +64,10 @@ services:
     volumes:
       - static_volume:/app/static
       - media_volume:/app/media
-      - ./logs:/app/logs  # Монтируем локальную папку
+      - app_logs:/app/logs
     ports:
       - '8000:8000'
+    user: "1000:1000"
     depends_on:
       db:
         condition: service_healthy
@@ -86,10 +87,10 @@ services:
     env_file:
       - .env
     command: celery -A config worker --loglevel=info
-    user: app
     volumes:
       - .:/app
-      - ./logs:/app/logs  # Монтируем локальную папку
+      - celery_logs:/app/logs
+    user: "1000:1000"
     depends_on:
       - redis
       - db
@@ -106,10 +107,10 @@ services:
     env_file:
       - .env
     command: celery -A config beat --loglevel=info
-    user: app
     volumes:
       - .:/app
-      - ./logs:/app/logs  # Монтируем локальную папку
+      - celery_beat_logs:/app/logs
+    user: "1000:1000"
     depends_on:
       - redis
       - db
@@ -134,3 +135,6 @@ volumes:
   redis_data:
   static_volume:
   media_volume:
+  app_logs:
+  celery_logs:
+  celery_beat_logs:
