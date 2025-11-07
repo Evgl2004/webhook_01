@@ -103,9 +103,12 @@ services:
       - celery_logs:/app/logs
     user: "1000:1000"
     depends_on:
-      - redis
-      - db
-      - migrate
+      migrate:
+        condition: service_completed_successfully  # Добавьте эту строку
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "celery", "-A", "config", "inspect", "ping" ]
@@ -124,9 +127,12 @@ services:
       - celery_beat_logs:/app/logs
     user: "1000:1000"
     depends_on:
-      - redis
-      - db
-      - migrate
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
   flower:
