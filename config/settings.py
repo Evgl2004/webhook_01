@@ -38,6 +38,17 @@ DEBUG = True
 ALLOWED_HOSTS = getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0').split(',')
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS]
 
+# Настройки безопасности для работы через HTTPS
+SECURE_SSL_REDIRECT = True  # Перенаправлять все HTTP-запросы на HTTPS
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # Указывает Django, что запрос пришел по HTTPS
+SESSION_COOKIE_SECURE = True  # Отправлять сессионные куки только по HTTPS
+CSRF_COOKIE_SECURE = True  # Отправлять CSRF-куки только по HTTPS
+
+# Дополнительные усиления безопасности (HSTS)
+SECURE_HSTS_SECONDS = 31536000  # 1 год: предписывает браузеру использовать только HTTPS
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True  # Распространяет правило HSTS на все поддомены
+SECURE_HSTS_PRELOAD = True  # Позволяет включить домен в предзагрузку HSTS в браузерах
+
 # Application definition
 
 INSTALLED_APPS = [
