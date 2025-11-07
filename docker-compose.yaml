@@ -64,7 +64,7 @@ services:
     volumes:
       - static_volume:/app/static
       - media_volume:/app/media
-      - logs_volume:/app/logs
+      - ./logs:/app/logs  # Монтируем локальную папку
     ports:
       - '8000:8000'
     depends_on:
@@ -89,7 +89,7 @@ services:
     user: app
     volumes:
       - .:/app
-      - logs_volume:/app/logs
+      - ./logs:/app/logs  # Монтируем локальную папку
     depends_on:
       - redis
       - db
@@ -109,7 +109,7 @@ services:
     user: app
     volumes:
       - .:/app
-      - logs_volume:/app/logs
+      - ./logs:/app/logs  # Монтируем локальную папку
     depends_on:
       - redis
       - db
@@ -134,4 +134,3 @@ volumes:
   redis_data:
   static_volume:
   media_volume:
-  logs_volume:
