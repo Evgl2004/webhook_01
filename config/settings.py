@@ -36,17 +36,8 @@ REQUIRED_PASSWORD = getenv('WEBHOOK_PASSWORD', 'NoSecretPassword')
 DEBUG = True
 
 # Проверяет, что запрос пришел с разрешенного домена/IP.
-# Защищает от с.
-# ALLOWED_HOSTS = [
-#     'localhost',
-#     '127.0.0.1',
-#     '0.0.0.0',
-#     'app',  # имя сервиса в Docker Compose
-#     'sagur.24vds.ru'  # реальный домен
-# ]
-
-# Временно для отладки:
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0').split(',')
+ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS]
 
 # Application definition
 

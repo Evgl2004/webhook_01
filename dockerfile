@@ -12,9 +12,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 3. Копирование проекта
 COPY . .
 
-# 4. Создание пользователя для безопасности
-# RUN useradd -m -r app && chown -R app:app /app
-# USER app
+# 4. Сборка статических файлов на этапе build
+RUN python manage.py collectstatic --no-input
 
-# 5. Команда по умолчанию (будет переопределена в docker-compose)
+# 5. Создание пользователя для безопасности
+RUN groupadd -r app && useradd -r -g app app
+RUN chown -R app:app /app
+USER app
+
+# 6. Команда по умолчанию (будет переопределена в docker-compose)
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
