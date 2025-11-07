@@ -141,7 +141,7 @@ services:
     restart: unless-stopped
 
   flower:
-    image: mher/flower:1.0
+    image: mher/flower:0.9.7
     env_file:
       - .env
     environment:
