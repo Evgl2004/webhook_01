@@ -14,7 +14,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - '127.0.0.1:5432:5432' # Только локальный доступ
+      # - '127.0.0.1:5432:5432' # Только локальный доступ
+      - '5432:5432' # Доступ открыт в сеть
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DATABASES_USER} -d ${DATABASES_NAME}"]
       interval: 10s
@@ -140,18 +141,28 @@ services:
     restart: unless-stopped
 
   flower:
-    build: .
+    image: mher/flower:1.0
     env_file:
       - .env
-    command: celery -A config flower --port=${FLOWER_PORT} --basic_auth=${FLOWER_USER}:${FLOWER_PASSWORD}
+    environment:
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - FLOWER_PORT=${FLOWER_PORT}
+      - FLOWER_BASIC_AUTH=${FLOWER_USER}:${FLOWER_PASSWORD}
     volumes:
       - flower_data:/app/var
     ports:
       - "5555:5555"
     depends_on:
-      - redis
-      - app
+      redis:
+        condition: service_healthy
+      celery:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5555/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   nginx:
     image: nginx:1.25-alpine
