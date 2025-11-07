@@ -16,8 +16,8 @@ COPY . .
 RUN python manage.py collectstatic --no-input
 
 # 5. Создание пользователя для безопасности
-RUN groupadd -r app && useradd -r -g app app
-RUN chown -R app:app /app
+RUN groupadd -r app && useradd -r -g app -s /bin/bash app && \
+    chown -R app:app /app
 USER app
 
 # 6. Команда по умолчанию (будет переопределена в docker-compose)
