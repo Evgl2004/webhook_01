@@ -1,54 +1,54 @@
 #!/bin/bash
 
-echo "Начало установки... Starting deployment..."
+echo -e "\n Начало установки... \n Starting deployment... \n"
 
 # Создание папки для логов
+echo -e "\n Создание папки для логов... \n Creating a folder for logs... \n"
 mkdir -p logs
 
 # Проверка наличия .env файла
 if [ ! -f .env ]; then
-    echo "Ошибка: .env файл не найден! Error: .env file not found!"
-    echo "Пожалуйста создайте .env файл из файла .env.example  Please create .env file from .env.example"
+    echo -e "\n Ошибка: .env файл не найден! \n Error: .env file not found! "
+    echo -e "\n Пожалуйста создайте .env файл из файла .env.sample \n Please create .env file from .env.sample \n"
     exit 1
 fi
 
 # Запуск сервисов
 
 # Останавливаем предыдущие контейнеры
-echo "Останавливаем предыдущие контейнеры... Stopping previous containers..."
-docker-compose down
+echo -e "\n Останавливаем предыдущие контейнеры... \n Stopping previous containers... \n"
+docker compose down
 
 # Запускаем базу данных и redis
-echo "Запускаем базу данных и redis... Starting database and redis..."
-docker-compose up -d db redis
+echo -e "\n Запускаем базу данных и redis... \n Starting database and redis... \n"
+docker compose up -d db redis
 
 # Ждем готовности БД
-echo "Ждем готовности базы данных... Waiting for database to be ready..."
-sleep 10
+echo -e "\n Ждем готовности базы данных 20с... \n Waiting for database to be ready 20s... \n"
+sleep 20
 
 # Запускаем миграции
-echo "Запускаем миграции... Running database migrations..."
-docker-compose up migrate
+echo -e "\n Запускаем миграции... \n Running database migrations... \n"
+docker compose up migrate
 
 # Проверяем успешность миграций
 if [ $? -ne 0 ]; then
-    echo "Ошибка: Не удалось выполнить миграцию базы данных! Error: Database migrations failed!"
+    echo -e "\n Ошибка: Не удалось выполнить миграцию базы данных! \n Error: Database migrations failed! \n"
     exit 1
 fi
 
 # Запускаем основные сервисы
-echo "Запускаем основные сервисы... Starting main services..."
-docker-compose up -d app celery celery-beat nginx
+echo -e "\n Запускаем основные сервисы... \n Starting main services... \n"
+docker compose up -d app celery celery-beat nginx
 
 # Предыдущая версия, где был запуск всего и сразу, без отдельных миграций
-# docker-compose up --build -d
+# docker compose up --build -d
 
 # Ждем и проверяем статус
-sleep 10
-echo "Проверяем статус... Checking services status..."
-docker-compose ps
+echo -e "\n Ждём 20с и проверяем статус... \n Wait 20s and checking services status... \n"
+sleep 20
+docker compose ps
 
-echo "Установка завершена! Deployment completed!"
-echo "Приложение запускается... Application is starting..."
-echo "Для проверки статуса: Check status with: docker compose ps"
-echo "Для просмотра статуса: View logs with: docker compose logs -f"
+echo -e "\n Установка завершена! \n Deployment completed!"
+echo -e "\n Для проверки статуса: \n Check status with: \n docker compose ps"
+echo -e "\n Для просмотра статуса: \n View logs with: \n docker compose logs -f"
