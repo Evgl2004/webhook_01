@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:17.5
@@ -7,12 +5,19 @@ services:
       - POSTGRES_DB=${DATABASES_NAME}
       - POSTGRES_USER=${DATABASES_USER}
       - POSTGRES_PASSWORD=${DATABASES_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=scram-sha-256
+      - POSTGRES_HOST_AUTH_METHOD=scram-sha-256
+      - POSTGRESQL_SHARED_BUFFERS=256MB
+      - POSTGRESQL_EFFECTIVE_CACHE_SIZE=1GB
+      - POSTGRESQL_WORK_MEM=16MB
+      - POSTGRESQL_MAINTENANCE_WORK_MEM=128MB
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - '5432:5432'
+      # - '127.0.0.1:5432:5432' # Только локальный доступ
+      - '5432:5432' # Доступ открыт в сеть
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASES_USER} -d ${DATABASES_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -136,18 +141,28 @@ services:
     restart: unless-stopped
 
   flower:
-    build: .
+    image: mher/flower:1.0
     env_file:
       - .env
-    command: celery -A config flower --port=${FLOWER_PORT} --basic_auth=${FLOWER_USER}:${FLOWER_PASSWORD}
+    environment:
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - FLOWER_PORT=${FLOWER_PORT}
+      - FLOWER_BASIC_AUTH=${FLOWER_USER}:${FLOWER_PASSWORD}
     volumes:
       - flower_data:/app/var
     ports:
       - "5555:5555"
     depends_on:
-      - redis
-      - app
+      redis:
+        condition: service_healthy
+      celery:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5555/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   nginx:
     image: nginx:1.25-alpine
