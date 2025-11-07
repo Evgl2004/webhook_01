@@ -13,7 +13,6 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 from os import getenv
 from dotenv import load_dotenv
-from celery.schedules import crontab
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -51,6 +50,7 @@ INSTALLED_APPS = [
 
     'main_wh',
     'rest_framework',
+    'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -169,7 +169,7 @@ CELERY_TIMEZONE = 'Asia/Yekaterinburg'
 CELERY_TASK_TRACK_STARTED = True
 
 # Максимальное время на выполнение задачи
-CELERY_TASK_TIME_LIMIT = 1 * 60  # Это максимальное время (в секундах), которое может выполняться задача.
+CELERY_TASK_TIME_LIMIT = 5 * 60  # Это максимальное время (в секундах), которое может выполняться задача.
 
 # Celery будет принимать задачи только в формате JSON
 CELERY_ACCEPT_CONTENT = ['json']
@@ -180,25 +180,20 @@ CELERY_TASK_SERIALIZER = 'json'
 # Когда задача завершается, её результат (например, число, строка, словарь) сохраняется в Redis в формате JSON.
 CELERY_RESULT_SERIALIZER = 'json'
 
-# Настройки для Celery
-CELERY_BEAT_SCHEDULE = {
-    # Обработка всех ожидающих уведомлений со статусом 'новый'
-    'process-pending-notifications': {
-        'task': 'main_wh.tasks.process_pending_notifications',
-        'schedule': 300.0,  # Каждые 5 минут
-    },
-    # Повторная обработки уведомлений со статусом 'ошибка' каждый день в 2:00
-    'retry-failed-notifications': {
-        'task': 'main_wh.tasks.retry_failed_notifications',
-        'schedule': crontab(hour=2, minute=0),
-    },
-    # Очистка старых записей каждый день в 4:00
-    'cleanup-old-notifications': {
-        'task': 'main_wh.tasks.cleanup_old_notifications',
-        'schedule': crontab(hour=4, minute=0),
-    },
-}
+# Подключение Celery-Beat
 
+# Включает отправку событий от Celery Worker'ов.
+# Мониторинг в реальном времени (Flower, инструменты мониторинга).
+CELERY_WORKER_SEND_TASK_EVENTS = True
+
+# Включает отправку события task-sent когда задача отправляется в очередь.
+CELERY_TASK_SEND_SENT_EVENT = True
+
+# Указывает Celery Beat использовать базу данных для хранения расписаний вместо файла.
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# Flower для мониторинга (опционально)
+CELERY_FLOWER_PORT = getenv('FLOWER_PORT', 5555)
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
