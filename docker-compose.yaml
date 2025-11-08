@@ -51,6 +51,8 @@ services:
       db:
         condition: service_healthy
     restart: "no"
+    networks:
+      - app_network
 
   createsuperuser:
     build: .
@@ -62,6 +64,8 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: "no"
+    networks:
+      - app_network
 
   celery-beat-setup:
     build: .
@@ -73,6 +77,8 @@ services:
         condition: service_completed_successfully
     restart: "no"
     profiles: ["setup"]
+    networks:
+      - app_network
 
   app:
     build: .
