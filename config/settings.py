@@ -32,7 +32,7 @@ SECRET_KEY = getenv('SECRET_KEY', 'fallback-key-for-dev-only')
 REQUIRED_PASSWORD = getenv('WEBHOOK_PASSWORD', 'NoSecretPassword')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = getenv('IS_DEBUG', True)
 
 # Проверяет, что запрос пришел с разрешенного домена/IP.
 ALLOWED_HOSTS = getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0').split(',')
@@ -48,6 +48,13 @@ CSRF_COOKIE_SECURE = True  # Отправлять CSRF-куки только п�
 SECURE_HSTS_SECONDS = 31536000  # 1 год: предписывает браузеру использовать только HTTPS
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True  # Распространяет правило HSTS на все поддомены
 SECURE_HSTS_PRELOAD = True  # Позволяет включить домен в предзагрузку HSTS в браузерах
+
+# Без CORS браузер блокирует JavaScript запросы между разными доменами
+CORS_ALLOW_ALL_ORIGINS = False
+
+# Защита от подделки межсайтовых запросов.
+CSRF_TRUSTED_ORIGINS = getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
+CSRF_TRUSTED_ORIGINS = [host.strip() for host in CSRF_TRUSTED_ORIGINS]
 
 # Application definition
 

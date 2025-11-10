@@ -12,7 +12,7 @@ services:
       - POSTGRESQL_WORK_MEM=16MB
       - POSTGRESQL_MAINTENANCE_WORK_MEM=128MB
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_prod_data:/var/lib/postgresql/data
     ports:
       # - '127.0.0.1:5432:5432' # Только локальный доступ
       - '5432:5432' # Доступ открыт в сеть
@@ -88,9 +88,9 @@ services:
     command: >
       bash -c "gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers=3"
     volumes:
-      - static_volume:/app/static
-      - media_volume:/app/media
-      - app_logs:/app/logs
+      - /var/log/webhook_app/app:/app/logs  # логи на хосте
+      - /opt/webhook_app/static:/app/static  # статика на хосте
+      - /opt/webhook_app/media:/app/media    # медиа на хосте
     ports:
       - '8000:8000'
     user: "1000:1000"
@@ -117,11 +117,11 @@ services:
     command: celery -A config worker --loglevel=info
     volumes:
       - .:/app
-      - celery_logs:/app/logs
+      - /var/log/webhook_app/celery:/app/logs  # логи на хосте
     user: "1000:1000"
     depends_on:
       migrate:
-        condition: service_completed_successfully  # Добавьте эту строку
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       db:
@@ -143,7 +143,7 @@ services:
       bash -c "celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
     volumes:
       - .:/app
-      - celery_beat_logs:/app/logs
+      - /var/log/webhook_app/celery_beat:/app/logs  # логи на хосте
     user: "1000:1000"
     depends_on:
       migrate:
@@ -166,8 +166,9 @@ services:
       - FLOWER_BASIC_AUTH=${FLOWER_USER}:${FLOWER_PASSWORD}
     volumes:
       - flower_data:/app/var
-    ports:
-      - "5555:5555"
+    # Убираем проброс порта, так как теперь используем через nginx
+    #ports:
+    #  - "5555:5555"
     depends_on:
       redis:
         condition: service_healthy
@@ -188,8 +189,8 @@ services:
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt
       - /tmp/acme-challenge:/var/www/certbot
-    command: renew --quiet --no-self-upgrade
-    restart: unless-stopped
+    command: renew --quiet
+    restart: "no"
     networks:
       - app_network
 
@@ -203,8 +204,9 @@ services:
       - ./options-ssl-nginx.conf:/etc/nginx/options-ssl-nginx.conf:ro  # Для дополнительных SSL-настроек
       - /etc/letsencrypt:/etc/letsencrypt:ro  # Монтируем директорию с сертификатами
       - /tmp/acme-challenge:/tmp/acme-challenge  # Для прохождения проверки Certbot
-      - static_volume:/app/static:ro
-      - media_volume:/app/media:ro
+      - /opt/webhook_app/static:/app/static:ro
+      - /opt/webhook_app/media:/app/media:ro
+      - /var/log/webhook_app/nginx:/var/log/nginx
     depends_on:
       - app
     restart: unless-stopped
@@ -212,13 +214,9 @@ services:
       - app_network  # Рекомендуется использовать явно объявленную сеть
 
 volumes:
-  postgres_data:
+  postgres_prod_data:
+    external: true
   redis_data:
-  static_volume:
-  media_volume:
-  app_logs:
-  celery_logs:
-  celery_beat_logs:
   flower_data:
 
 networks:
