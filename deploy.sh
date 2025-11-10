@@ -24,8 +24,8 @@ echo -e "\n Запускаем базу данных и redis... \n Starting dat
 docker compose up -d db redis
 
 # Ждем готовности БД
-echo -e "\n Ждем готовности базы данных 20с... \n Waiting for database to be ready 20s... \n"
-sleep 20
+echo -e "\n Ждем готовности базы данных 30с... \n Waiting for database to be ready 30s... \n"
+sleep 30
 
 # Запускаем миграции
 echo -e "\n Запускаем миграции... \n Running database migrations... \n"
@@ -37,9 +37,16 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+echo -e "\n Ждем завершения миграции 20с... \n Waiting for database migrations 20s... \n"
+sleep 20
+
+# Создаем Администратора
+echo -e "\n Создаем Администратора... \n Creating superuser... \n"
+docker compose up createsuperuser
+
 # Запускаем основные сервисы
 echo -e "\n Запускаем основные сервисы... \n Starting main services... \n"
-docker compose up -d app celery celery-beat nginx
+docker compose up -d app celery celery-beat nginx flower
 
 # Предыдущая версия, где был запуск всего и сразу, без отдельных миграций
 # docker compose up --build -d
