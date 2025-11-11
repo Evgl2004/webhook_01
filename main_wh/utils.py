@@ -146,7 +146,7 @@ class WebhookProcessor:
                 cls.process_balance_notification(notification, business_data, parsed_data)
             elif '/category/' in notification.path:
                 cls.process_category_notification(notification, business_data, parsed_data)
-            elif '/Zr6mmitc9NdqtbdQJ5cBbgszyxvr0lg6/' in notification.path:
+            elif '/Zr6mmitc9NdqtbdQJ5cBbgszyxvr0lg6' in notification.path:
                 cls.process_teletype_notification(notification, business_data, parsed_data)
             else:
                 cls.process_generic_notification(notification, business_data, parsed_data)
