@@ -146,6 +146,8 @@ class WebhookProcessor:
                 cls.process_balance_notification(notification, business_data, parsed_data)
             elif '/category/' in notification.path:
                 cls.process_category_notification(notification, business_data, parsed_data)
+            elif '/Zr6mmitc9NdqtbdQJ5cBbgszyxvr0lg6/' in notification.path:
+                cls.process_teletype_notification(notification, business_data, parsed_data)
             else:
                 cls.process_generic_notification(notification, business_data, parsed_data)
 
@@ -247,6 +249,23 @@ class WebhookProcessor:
             notification.processed_at = timezone.now()
             notification.save()
             logger.error(f"Ошибка обработки категории для {notification.id}: {str(err)}")
+
+    @classmethod
+    def process_teletype_notification(cls, notification, business_data, parsed_data):
+        """Обработка уведомлений от Teletype"""
+        try:
+            logger.info(f"Обработка Teletype для уведомления {notification.id}")
+
+            # Если все успешно - меняем статус
+            notification.status = 'complete'
+            notification.processed_at = timezone.now()
+            notification.save()
+
+        except Exception as err:
+            notification.status = 'error'
+            notification.error_description = f"Ошибка обработки Teletype уведомления: {str(err)}"
+            notification.processed_at = timezone.now()
+            notification.save()
 
     @classmethod
     def process_generic_notification(cls, notification, business_data, parsed_data):
