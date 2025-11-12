@@ -127,29 +127,29 @@ class WebhookProcessor:
 
         try:
             # 1. Разбираем полученную структуру данных
-            parsed_data = cls.parse_notification_data(notification)
+            #parsed_data = cls.parse_notification_data(notification)
 
             # 2. Проверяем пароль
-            if not cls.validate_password(parsed_data):
-                notification.status = 'error'
-                notification.error_description = 'Неверный или отсутствующий пароль'
-                notification.processed_at = timezone.now()
-                notification.save()
-                logger.warning(f"Уведомление {notification.id} - неверный пароль")
-                return
+            #if not cls.validate_password(parsed_data):
+            #    notification.status = 'error'
+            #    notification.error_description = 'Неверный или отсутствующий пароль'
+            #    notification.processed_at = timezone.now()
+            #    notification.save()
+            #    logger.warning(f"Уведомление {notification.id} - неверный пароль")
+            #    return
 
             # 3. Извлекаем бизнес-данные (только после проверки пароля)
-            business_data = cls.extract_business_data(parsed_data)
+            #business_data = cls.extract_business_data(parsed_data)
 
             # 4. Определяем тип обработки по пути
-            if '/balance/' in notification.path:
-                cls.process_balance_notification(notification, business_data, parsed_data)
-            elif '/category/' in notification.path:
-                cls.process_category_notification(notification, business_data, parsed_data)
-            elif '/Zr6mmitc9NdqtbdQJ5cBbgszyxvr0lg6' in notification.path:
-                cls.process_teletype_notification(notification, business_data, parsed_data)
+            #if '/balance/' in notification.path:
+            #    cls.process_balance_notification(notification, business_data, parsed_data)
+            #elif '/category/' in notification.path:
+            #    cls.process_category_notification(notification, business_data, parsed_data)
+            if '/Zr6mmitc9NdqtbdQJ5cBbgszyxvr0lg6' in notification.path:
+                cls.process_teletype_notification(notification)
             else:
-                cls.process_generic_notification(notification, business_data, parsed_data)
+                cls.process_generic_notification(notification)
 
         except Exception as err:
             notification.status = 'error'
@@ -251,7 +251,7 @@ class WebhookProcessor:
             logger.error(f"Ошибка обработки категории для {notification.id}: {str(err)}")
 
     @classmethod
-    def process_teletype_notification(cls, notification, business_data, parsed_data):
+    def process_teletype_notification(cls, notification):
         """Обработка уведомлений от Teletype"""
         try:
             logger.info(f"Обработка Teletype для уведомления {notification.id}")
@@ -268,7 +268,7 @@ class WebhookProcessor:
             notification.save()
 
     @classmethod
-    def process_generic_notification(cls, notification, business_data, parsed_data):
+    def process_generic_notification(cls, notification):
         """Обработка уведомлений неизвестного типа"""
         try:
             logger.warning(f"Неизвестный тип уведомления {notification.id}")
