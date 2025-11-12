@@ -58,7 +58,8 @@ class WebhookRequestCreateAPIView(generics.CreateAPIView):
 
         try:
             # Проверка размера данных
-            if len(request.body) > 5000:  # Лимит из модели
+            if len(request.body) > 10000:  # Лимит из модели
+                logger.error(f"Превышен допустимый размер данных from IP: {get_client_ip(request)}")
                 return Response({
                     "status": "error",
                     "message": "Превышен допустимый размер данных"
@@ -74,7 +75,7 @@ class WebhookRequestCreateAPIView(generics.CreateAPIView):
             # ОБРАБОТКА РАЗНЫХ ФОРМАТОВ ДАННЫХ
             parsed_data = {}
 
-            if request.content_type == 'application/json':
+            if content_type_request == 'application/json':
                 # Для JSON используем request.data
                 parsed_data = request.data if request.data else {}
 
