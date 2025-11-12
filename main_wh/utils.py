@@ -28,49 +28,94 @@ class WebhookProcessor:
     @classmethod
     def safe_parse_form_data(cls, notification, max_size=5000, max_params=100):
         """
-        Безопасный парсинг form-data
+        Безопасный парсинг form-data - использует данные из views.py как основу
         """
 
-        body = notification.data
-
-        if len(body) > max_size:
-            notification.status = 'error'
-            notification.error_description = f"Ошибка обработки: data_too_large"
-            notification.processed_at = timezone.now()
-            notification.save()
-
-            logger.warning(f"Ошибка обработки: data_too_large")
-
         try:
+            # 1. ПРОВЕРКА РАЗМЕРА - ЗАЩИТА ОТ ПЕРЕПОЛНЕНИЯ
+            body = notification.data
+            if len(body) > max_size:
+                notification.status = 'error'
+                notification.error_description = f"Ошибка обработки: data_too_large"
+                notification.processed_at = timezone.now()
+                notification.save()
+                logger.warning(f"Ошибка обработки: data_too_large")
+                return
+
+            # 2. ПАРСИНГ С ПРОВЕРКОЙ СТРУКТУРЫ
             parsed_qs = parse_qs(body, strict_parsing=True)
 
+            # 3. ПРОВЕРКА КОЛИЧЕСТВА ПАРАМЕТРОВ - ЗАЩИТА ОТ АТАК
             if len(parsed_qs) > max_params:
                 notification.status = 'error'
                 notification.error_description = f"Ошибка обработки: too_many_parameters"
                 notification.processed_at = timezone.now()
                 notification.save()
-
                 logger.warning(f"Ошибка обработки: too_many_parameters")
+                return
 
-            # Безопасное преобразование с ограничениями
+            # 4. БЕЗОПАСНОЕ ПРЕОБРАЗОВАНИЕ С ОГРАНИЧЕНИЯМИ
             result = {}
+
             for key, values in parsed_qs.items():
-                # Ограничение длины ключа и значения
-                if len(key) <= 100 and values and len(values[0]) <= 1000:
-                    result[key[:100]] = values[0][:1000]
+                # Ограничение длины ключа
+                if len(key) > 100:
+                    continue
 
-            notification.status = 'complete'
+                if values:  # Ограничение длины значения
+                    value = values[0]
+
+                    # 5. БЕЗОПАСНЫЙ ПАРСИНГ
+                    if key in ['payload', 'data', 'json']:
+                        # Увеличиваем лимит для JSON
+                        if len(value) <= 10000:
+                            # БЕЗОПАСНЫЙ JSON ПАРСИНГ
+                            if value.strip().startswith('{'):
+                                try:
+                                    parsed_json = json.loads(value)
+                                    if cls.is_safe_json_structure(parsed_json, max_depth=5):
+                                        result[key] = parsed_json
+                                    else:
+                                        result[key] = value
+                                except json.JSONDecodeError:
+                                    result[key] = value
+                    else:
+                        # Для обычных полей оставляем старый лимит
+                        if len(value) <= 1000:
+                            result[key] = value
+
+            # 6. СОХРАНЕНИЕ РЕЗУЛЬТАТА
             notification.parsed_body = result
+            notification.status = 'complete'
             notification.processed_at = timezone.now()
             notification.save()
 
-        except Exception as e:
+        except Exception as err:
             notification.status = 'error'
-            notification.error_description = f"Не удалось выполнить анализ формы данных: {str(e)}"
+            notification.error_description = f"Не удалось выполнить преобразование представления данных: {str(err)}"
             notification.processed_at = timezone.now()
             notification.save()
+            logger.warning(f"Не удалось выполнить преобразование представления данных: {str(err)}")
 
-            logger.warning(f"Не удалось выполнить анализ формы данных: {str(e)}")
+    @classmethod
+    def is_safe_json_structure(cls, data, max_depth=5, current_depth=0):
+        """
+        Проверка, что JSON не слишком сложный/глубокий
+        """
+
+        if current_depth > max_depth:
+            return False
+
+        if isinstance(data, dict):
+            for value in data.values():
+                if not cls.is_safe_json_structure(value, max_depth, current_depth + 1):
+                    return False
+        elif isinstance(data, list):
+            for item in data:
+                if not cls.is_safe_json_structure(item, max_depth, current_depth + 1):
+                    return False
+
+        return True
 
     @classmethod
     def parse_notification_data(cls, notification):
@@ -176,7 +221,8 @@ class WebhookProcessor:
 
         try:
             # 1. Разбираем полученную структуру данных
-            if notification.parsed_body == {}:
+            # ВСЕГДА обрабатываем form-data в фоне
+            if 'application/x-www-form-urlencoded' in notification.content_type:
                 # Формат form-urlencoded - безопасный парсинг
                 cls.safe_parse_form_data(notification)
             #parsed_data = cls.parse_notification_data(notification)
