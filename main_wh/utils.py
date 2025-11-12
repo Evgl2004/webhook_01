@@ -4,6 +4,8 @@ from django.utils import timezone
 from main_wh.models import WebhookRequest
 from config.settings import REQUIRED_PASSWORD
 
+from urllib.parse import parse_qs
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,6 +24,53 @@ def get_client_ip(request):
 
 class WebhookProcessor:
     """Базовый класс для обработки webhook - ВСЯ логика в фоне"""
+
+    @classmethod
+    def safe_parse_form_data(cls, notification, max_size=5000, max_params=100):
+        """
+        Безопасный парсинг form-data
+        """
+
+        body = notification.data
+
+        if len(body) > max_size:
+            notification.status = 'error'
+            notification.error_description = f"Ошибка обработки: data_too_large"
+            notification.processed_at = timezone.now()
+            notification.save()
+
+            logger.warning(f"Ошибка обработки: data_too_large")
+
+        try:
+            parsed_qs = parse_qs(body, strict_parsing=True)
+
+            if len(parsed_qs) > max_params:
+                notification.status = 'error'
+                notification.error_description = f"Ошибка обработки: too_many_parameters"
+                notification.processed_at = timezone.now()
+                notification.save()
+
+                logger.warning(f"Ошибка обработки: too_many_parameters")
+
+            # Безопасное преобразование с ограничениями
+            result = {}
+            for key, values in parsed_qs.items():
+                # Ограничение длины ключа и значения
+                if len(key) <= 100 and values and len(values[0]) <= 1000:
+                    result[key[:100]] = values[0][:1000]
+
+            notification.status = 'complete'
+            notification.parsed_body = result
+            notification.processed_at = timezone.now()
+            notification.save()
+
+        except Exception as e:
+            notification.status = 'error'
+            notification.error_description = f"Не удалось выполнить анализ формы данных: {str(e)}"
+            notification.processed_at = timezone.now()
+            notification.save()
+
+            logger.warning(f"Не удалось выполнить анализ формы данных: {str(e)}")
 
     @classmethod
     def parse_notification_data(cls, notification):
@@ -127,6 +176,9 @@ class WebhookProcessor:
 
         try:
             # 1. Разбираем полученную структуру данных
+            if notification.parsed_body == {}:
+                # Формат form-urlencoded - безопасный парсинг
+                cls.safe_parse_form_data(notification)
             #parsed_data = cls.parse_notification_data(notification)
 
             # 2. Проверяем пароль
