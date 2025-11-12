@@ -37,12 +37,18 @@ class WebhookRequestCreateAPIView(generics.CreateAPIView):
         # ЯВНАЯ проверка Content-Type
         allowed_content_types = [
             'application/json',
-            'application/x-www-form-urlencoded',
-            'application/x-www-form-urlencoded; charset=utf-8',
-            'application/x-www-form-urlencoded; charset=UTF-8'
+            'application/x-www-form-urlencoded'
         ]
 
-        if request.content_type not in allowed_content_types:
+        # Извлекает основной MIME-тип из заголовка Content-Type,
+        # игнорируя кодировку и другие параметры.
+        content_type_request = request.content_type
+        if content_type_request:
+            # Разделяем строку по точке с запятой и берем первую часть,
+            # а также приводим к нижнему регистру для единообразия
+            content_type_request = content_type_request.split(';')[0].strip().lower()
+
+        if content_type_request not in allowed_content_types:
             logger.warning(f"Заблокирован неподдерживаемый Content-Type: {request.content_type} "
                            f"from IP: {get_client_ip(request)}")
             return Response(

@@ -348,7 +348,7 @@ LOGGING = {
         # Логгер для Django фреймворка - теперь пишем ВСЕ в режиме отладки
         'django': {
             'handlers': ['file_django_all', 'file_django_errors', 'console'],
-            'level': 'ERROR',
+            'level': 'WARNING',
             'propagate': False,
         },
         # # Логгер для SQL-запросов
@@ -360,19 +360,19 @@ LOGGING = {
         # Логгер приложения main_wh
         'main_wh': {
             'handlers': ['file_apps_all', 'file_apps_errors', 'console'],
-            'level': 'ERROR',
+            'level': 'WARNING',
             'propagate': False,
         },
         # Логгер для других приложений
         'apps': {
             'handlers': ['file_apps_all', 'file_apps_errors', 'console'],
-            'level': 'ERROR',
+            'level': 'WARNING',
             'propagate': False,
         },
         # Корневой логгер
         '': {
             'handlers': ['file_apps_all', 'file_apps_errors', 'console'],
-            'level': 'ERROR',
+            'level': 'WARNING',
         },
     },
 }
