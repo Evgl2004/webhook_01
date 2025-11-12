@@ -1,7 +1,7 @@
 from django.utils import timezone
 
 from rest_framework import status, generics
-from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
+from rest_framework.parsers import JSONParser, FormParser
 from rest_framework.response import Response
 
 from main_wh.models import WebhookRequest
