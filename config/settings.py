@@ -45,6 +45,13 @@ SESSION_COOKIE_SECURE = True  # Отправлять сессионные кук
 CSRF_COOKIE_SECURE = True  # Отправлять CSRF-куки только по HTTPS
 USE_X_FORWARDED_HOST = False    # если нужен в сложных сценариях с несколькими прокси или особой маршрутизацией.
 
+# Включает XSS фильтр в браузерах. Добавляет заголовок "X-XSS-Protection: 1; mode=block"
+SECURE_BROWSER_XSS_FILTER = True
+# Запрещает браузерам "угадывать" MIME-типы. Добавляет заголовок "X-Content-Type-Options: nosniff"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+# Запрещает встраивание сайта в iframe. Добавляет заголовок "X-Frame-Options: DENY".
+X_FRAME_OPTIONS = 'DENY'
+
 # Дополнительные усиления безопасности (HSTS)
 SECURE_HSTS_SECONDS = 31536000  # 1 год: предписывает браузеру использовать только HTTPS
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True  # Распространяет правило HSTS на все поддомены
