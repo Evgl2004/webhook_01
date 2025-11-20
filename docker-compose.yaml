@@ -29,9 +29,10 @@ services:
 
   redis:
     image: redis:7.0.1
-#    Данные сохраняются в файл и восстанавливаются после перезапуска
-#    command: redis-server --appendonly yes
-    command: redis-server  # Данные ТОЛЬКО в памяти, теряются при перезапуске
+    # Данные сохраняются в файл и восстанавливаются после перезапуска
+    # command: redis-server --appendonly yes
+    # # Данные ТОЛЬКО в памяти, теряются при перезапуске
+    command: redis-server
     volumes:
       - redis_data:/data
     healthcheck:
@@ -45,6 +46,8 @@ services:
 
   migrate:
     build: .
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
     command: >
       bash -c "echo 'Ожидаем запуск PostgreSQL 20с... Waiting for PostgreSQL...' &&
                sleep 20 &&
@@ -60,6 +63,8 @@ services:
     build: .
     env_file:
       - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
     command: >
       bash -c "python manage.py createsu"
     depends_on:
@@ -73,6 +78,8 @@ services:
     build: .
     env_file:
       - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
     command: python manage.py setup_celery_schedules
     depends_on:
       migrate:
@@ -86,6 +93,8 @@ services:
     build: .
     env_file:
       - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
     tty: true
     command: >
       bash -c "gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers=3"
@@ -116,6 +125,8 @@ services:
     build: .
     env_file:
       - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
     command: celery -A config worker --loglevel=info
     volumes:
       - .:/app

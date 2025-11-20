@@ -32,7 +32,7 @@ SECRET_KEY = getenv('SECRET_KEY', 'fallback-key-for-dev-only')
 REQUIRED_PASSWORD = getenv('WEBHOOK_PASSWORD', 'NoSecretPassword')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = getenv('IS_DEBUG', True)
+DEBUG = getenv('IS_DEBUG', 'True').strip().lower() in ('true', '1', 'yes')
 
 # Проверяет, что запрос пришел с разрешенного домена/IP.
 ALLOWED_HOSTS = getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0').split(',')
@@ -168,7 +168,7 @@ STATIC_ROOT = BASE_DIR / 'static'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Настройки кэша через Redis:
-CACHE_ENABLED = bool(getenv('CACHE_ENABLED'))
+CACHE_ENABLED = getenv('CACHE_ENABLED', 'True').strip().lower() in ('true', '1', 'yes')
 
 if CACHE_ENABLED:
     CACHES = {
