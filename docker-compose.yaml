@@ -20,9 +20,10 @@ services:
       - '5432:5432' # Доступ открыт в сеть
     healthcheck:
       test: ["CMD-SHELL", "PGPASSWORD=${DATABASES_PASSWORD} pg_isready -U ${DATABASES_USER} -d ${DATABASES_NAME}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 30s
+      timeout: 10s
+      retries: 3        # количество попыток
+      start_period: 20s # начальный период
     restart: unless-stopped
     networks:
       - app_network
@@ -37,9 +38,9 @@ services:
       - redis_data:/data
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: unless-stopped
     networks:
       - app_network
