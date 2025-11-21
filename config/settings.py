@@ -200,7 +200,7 @@ CELERY_TASK_TIME_LIMIT = 5 * 60  # Это максимальное время (�
 # Celery будет принимать задачи только в формате JSON
 CELERY_ACCEPT_CONTENT = ['json']
 
-# Все параметры задачи (аргументы, метаданные) будут преобразованы в JSON перед отправкой в брокер Redis.
+# Все параметры задачи (аргументы, метаданные) будут преобразованы в JSON перед отправкой во брокер Redis.
 CELERY_TASK_SERIALIZER = 'json'
 
 # Когда задача завершается, её результат (например, число, строка, словарь) сохраняется в Redis в формате JSON.
@@ -285,100 +285,57 @@ LOGGING = {
     },
     # Обработчики, определяют куда и как писать логи
     'handlers': {
-        # Файл для ВСЕХ логов Django (в режиме отладки)
-        'file_django_all': {
-            'level': 'DEBUG',
-            'class': 'logging.handlers.TimedRotatingFileHandler',
-            'filename': LOG_DIR / 'django_all.log',
-            'when': 'midnight',
-            'backupCount': 14,  # Увеличиваем до 14 дней
-            'formatter': 'detailed',
-            'filters': ['require_debug_true'],  # Только в режиме отладки
-        },
-        # Файл для ВСЕХ логов приложений (в режиме отладки)
-        'file_apps_all': {
-            'level': 'DEBUG',
-            'class': 'logging.handlers.TimedRotatingFileHandler',
-            'filename': LOG_DIR / 'apps_all.log',
-            'when': 'midnight',
-            'backupCount': 14,
-            'formatter': 'detailed',
-            'filters': ['require_debug_true'],  # Только в режиме отладки
-        },
-        # Файл для общих ошибок Django
-        'file_django_errors': {
-            # Только уровень сообщений типа ERROR и выше
-            'level': 'ERROR',
-            'class': 'logging.handlers.TimedRotatingFileHandler',
-            'filename': LOG_DIR / 'django_errors.log',
-            'when': 'midnight',  # ротация каждый день в полночь
-            'backupCount': 7,    # хранить 7 дней
-            'formatter': 'verbose',
-        },
-        # Файл для ошибок приложений
-        'file_apps_errors': {
-            'level': 'ERROR',
-            'class': 'logging.handlers.TimedRotatingFileHandler',
-            'filename': LOG_DIR / 'apps_errors.log',
-            'when': 'midnight',
-            'backupCount': 7,
-            'formatter': 'verbose',
-        },
-        # Файл для критических ошибок
-        'file_critical': {
-            'level': 'CRITICAL',
-            'class': 'logging.handlers.TimedRotatingFileHandler',
-            'filename': LOG_DIR / 'critical.log',
-            'when': 'midnight',
-            'backupCount': 7,
-            'formatter': 'verbose',
-        },
-        # Консоль для разработки
+        # Основной, в консоль, будут работать всегда, для оперативного анализа.
         'console': {
-            'level': 'DEBUG',
-            'filters': ['require_debug_true'],
+            'level': 'INFO',
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
         },
-        # Дополнительный файл для SQL-запросов (очень полезно при отладке)
-        # 'file_sql': {
-        #     'level': 'DEBUG',
-        #     'class': 'logging.handlers.TimedRotatingFileHandler',
-        #     'filename': LOG_DIR / 'sql_queries.log',
-        #     'when': 'midnight',
-        #     'backupCount': 7,
-        #     'formatter': 'simple',
-        #     'filters': ['require_debug_true'],
-        # },
+        # Файл для ВСЕХ логов Django (будет работать всегда для истории)
+        'file_django_all': {
+            'level': 'INFO',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': LOG_DIR / 'django_all.log',
+            'when': 'midnight',
+            # Количество дней
+            'backupCount': 7,
+            'formatter': 'verbose',
+        },
+        # Файл для ВСЕХ логов приложений (будет работать всегда для истории)
+        'file_apps_all': {
+            'level': 'INFO',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': LOG_DIR / 'apps_all.log',
+            'when': 'midnight',
+            'backupCount': 7,
+            'formatter': 'verbose',
+        },
+        # Общий файл для ошибок
+        'file_errors': {
+            'level': 'ERROR',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': LOG_DIR / 'errors.log',
+            'when': 'midnight',
+            'backupCount': 14,
+            'formatter': 'verbose',
+        },
     },
     'loggers': {
-        # Логгер для Django фреймворка - теперь пишем ВСЕ в режиме отладки
+        # Логгер для Django фреймворка
         'django': {
-            'handlers': ['file_django_all', 'file_django_errors', 'console'],
-            'level': 'WARNING',
+            'handlers': ['console', 'file_django_all', 'file_errors'],
+            'level': 'INFO',
             'propagate': False,
         },
-        # # Логгер для SQL-запросов
-        # 'django.db.backends': {
-        #     'handlers': ['file_sql', 'console'],
-        #     'level': 'DEBUG',
-        #     'propagate': False,
-        # },
         # Логгер приложения main_wh
         'main_wh': {
-            'handlers': ['file_apps_all', 'file_apps_errors', 'console'],
-            'level': 'WARNING',
-            'propagate': False,
-        },
-        # Логгер для других приложений
-        'apps': {
-            'handlers': ['file_apps_all', 'file_apps_errors', 'console'],
-            'level': 'WARNING',
+            'handlers': ['console', 'file_apps_all', 'file_errors'],
+            'level': 'INFO',
             'propagate': False,
         },
         # Корневой логгер
         '': {
-            'handlers': ['file_apps_all', 'file_apps_errors', 'console'],
+            'handlers': ['console', 'file_apps_all', 'file_errors'],
             'level': 'WARNING',
         },
     },
