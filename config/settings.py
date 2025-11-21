@@ -120,6 +120,25 @@ DATABASES = {
         'PASSWORD': getenv('DATABASES_PASSWORD'),
         'HOST': getenv('DATABASES_HOST', 'localhost'),
         'PORT': getenv('DATABASES_PORT', '5432'),
+
+        # Позволяет проверять, действительно ли соединение живо, перед его повторным использованием в новом запросе.
+        'CONN_HEALTH_CHECKS': True,
+        # Держать соединение 5 минут.
+        'CONN_MAX_AGE': 300,
+        'OPTIONS': {
+            # Максимальное время ожидания подключения к БД - 30 секунд.
+            'connect_timeout': 30,
+            # Включает TCP keepalive для соединения с БД.
+            # Система будет периодически проверять, живо ли соединение.
+            'keepalives': 1,
+            # Время бездействия перед отправкой первого keepalive-пакета.
+            # Если соединение простаивает 30 секунд - отправляется keepalive-пакет.
+            'keepalives_idle': 30,
+            # Интервал между keepalive-пакетами, если на предыдущий не было ответа.
+            'keepalives_interval': 10,
+            # Количество потерянных keepalive-пакетов перед разрывом соединения.
+            'keepalives_count': 5,
+        }
     }
 }
 
@@ -190,6 +209,20 @@ CELERY_RESULT_BACKEND = getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/
 
 # Часовой пояс для работы Celery
 CELERY_TIMEZONE = 'Asia/Yekaterinburg'
+
+# Проверяет базу данных на наличие новых задач каждые 60 секунд.
+CELERY_BEAT_MAX_LOOP_INTERVAL = 60
+
+# Включает повторные попытки подключения к брокеру при запуске Celery worker/приложения.
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+# Включает повторные попытки подключения к брокеру во время работы приложения.
+# Если соединение с брокером прервется во время работы, Celery будет пытаться восстановить его.
+# Применяется ко всем операциям, а не только к старту.
+CELERY_BROKER_CONNECTION_RETRY = True
+
+# Ограничивает максимальное количество попыток подключения.
+CELERY_BROKER_CONNECTION_MAX_RETRIES = 3
 
 # Флаг отслеживания выполнения задач
 CELERY_TASK_TRACK_STARTED = True
