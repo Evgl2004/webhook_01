@@ -16,7 +16,6 @@ def health_check(request):
 
 
 urlpatterns = [
-    path('webhooks/v1/phajA9JMvruP8bhJJQOYzs8vwKlFiX6f', WebhookRequestCreateAPIView.as_view(), name='webhook_create'),
-    path('webhooks/v1/Zr6mmitc9NdqtbdQJ5cBbgszyxvr0lg6', WebhookRequestCreateAPIView.as_view(), name='webhook_create'),
+    path('webhooks/<str:id_ext>', WebhookRequestCreateAPIView.as_view(), name='webhook_create'),
     path('health', HealthCheckAPIView.as_view(), name='health_check'),
 ] + router.urls

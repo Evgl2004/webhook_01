@@ -57,6 +57,12 @@ SECURE_HSTS_SECONDS = 31536000  # 1 год: предписывает брауз�
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True  # Распространяет правило HSTS на все поддомены
 SECURE_HSTS_PRELOAD = True  # Позволяет включить домен в предзагрузку HSTS в браузерах
 
+# Блокировка User-Agent сканеров
+DISALLOWED_USER_AGENTS = [
+    'libredtail-http', 'zgrab', 'Go-http-client',
+    'sqlmap', 'nmap', 'nikto'
+]
+
 # Без CORS браузер блокирует JavaScript запросы между разными доменами
 CORS_ALLOW_ALL_ORIGINS = False
 
