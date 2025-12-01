@@ -13,8 +13,21 @@ services:
       - POSTGRESQL_EFFECTIVE_CACHE_SIZE=1GB
       - POSTGRESQL_WORK_MEM=16MB
       - POSTGRESQL_MAINTENANCE_WORK_MEM=128MB
+      - BARMAN_PASSWORD=${BARMAN_PASSWORD}
+      - STREAMING_BARMAN_PASSWORD=${STREAMING_BARMAN_PASSWORD}
+      # Уровень детализации информации, записываемой в WAL.
+      - POSTGRES_WAL_LEVEL=replica
+      # Прямой указатель PostgreSQL включить механизм архивации WAL-файлов.
+      - POSTGRES_ARCHIVE_MODE=on
+      # Это команда, которую PostgreSQL выполняет для отправки каждого заполненного WAL-сегмента в архив.
+      # Максимальное количество одновременных подключений для отправки WAL-данных.
+      - POSTGRES_MAX_WAL_SENDERS=3
+      # Модуль pg_stat_statements, который собирает статистику по выполнению всех SQL-запросов в системе.
+      # Инструмент для анализа и оптимизации производительности БД.
+      - POSTGRES_SHARED_PRELOAD_LIBRARIES=pg_stat_statements
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
+      - ./barman-init-db.sh:/docker-entrypoint-initdb.d/barman-init-db.sh:ro
     ports:
       # - '127.0.0.1:5432:5432' # Только локальный доступ
       - '5432:5432' # Доступ открыт в сеть
@@ -237,11 +250,40 @@ services:
     networks:
       - app_network  # Рекомендуется использовать явно объявленную сеть
 
+  barman:
+    build:
+      context: .
+      dockerfile: Dockerfile.barman
+    environment:
+      - BARMAN_CONFIG_FILE=/etc/barman/barman.conf
+      - BARMAN_CONFIGURATION_FILES_DIRECTORY=/etc/barman/conf.d
+      - POSTGRES_HOST=${DATABASES_HOST}
+      - POSTGRES_PORT=${DATABASES_PORT}
+      - POSTGRES_DB=${DATABASES_NAME}
+      - BARMAN_USER=${BARMAN_USER}
+      - BARMAN_PASSWORD=${BARMAN_PASSWORD}
+      - STREAMING_BARMAN_USER=${STREAMING_BARMAN_USER}
+      - STREAMING_BARMAN_PASSWORD=${STREAMING_BARMAN_PASSWORD}
+    volumes:
+      - barman_data:/var/lib/barman
+      - ./barman/barman.conf:/etc/barman/barman.conf:ro
+      #- ./barman/conf.d:/etc/barman/conf.d:ro
+      - /var/log/webhook_app/barman:/var/log/barman
+      - ./barman/scripts:/opt/barman-scripts:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app_network
+    command: ["/opt/barman-scripts/init-barman.sh"]
+
 volumes:
   postgres_prod_data:
     external: true
   redis_data:
   flower_data:
+  barman_data:
 
 networks:
   app_network:
