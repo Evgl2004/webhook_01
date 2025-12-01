@@ -2,8 +2,6 @@ import json
 import logging
 from django.utils import timezone
 from main_wh.models import WebhookRequest
-from config.settings import REQUIRED_PASSWORD
-
 from urllib.parse import parse_qs
 
 logger = logging.getLogger(__name__)
@@ -12,7 +10,6 @@ logger = logging.getLogger(__name__)
 def get_client_ip(request):
     """
     Получение IP адреса клиента.
-    Используется при обработке входящего запроса.
     """
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded_for:
@@ -23,94 +20,154 @@ def get_client_ip(request):
 
 
 class WebhookProcessor:
-    """Базовый класс для обработки webhook - ВСЯ логика в фоне"""
+    """Класс для безопасного парсинга и валидации входящих уведомлений"""
 
     @classmethod
-    def safe_parse_form_data(cls, notification, max_size=5000, max_params=100):
+    def safe_parse_form_data(cls, notification, max_size=10000, max_params=50):
         """
-        Безопасный парсинг form-data - использует данные из views.py как основу
+        Безопасный парсинг form-data с защитой от переполнения и атак
         """
-
         try:
-            # 1. ПРОВЕРКА РАЗМЕРА - ЗАЩИТА ОТ ПЕРЕПОЛНЕНИЯ
+            # 1. ПРОВЕРКА РАЗМЕРА
             body = notification.data
             if len(body) > max_size:
                 notification.status = 'error'
-                notification.error_description = f"Ошибка обработки: data_too_large"
+                notification.error_description = f"Превышен максимальный размер данных: {len(body)} > {max_size}"
                 notification.processed_at = timezone.now()
                 notification.save()
-                logger.warning(f"Ошибка обработки: data_too_large")
+                logger.warning(f"Webhook {notification.id}: превышен размер данных")
                 return
 
             # 2. ПАРСИНГ С ПРОВЕРКОЙ СТРУКТУРЫ
             parsed_qs = parse_qs(body, strict_parsing=True)
 
-            # 3. ПРОВЕРКА КОЛИЧЕСТВА ПАРАМЕТРОВ - ЗАЩИТА ОТ АТАК
+            # 3. ПРОВЕРКА КОЛИЧЕСТВА ПАРАМЕТРОВ
             if len(parsed_qs) > max_params:
                 notification.status = 'error'
-                notification.error_description = f"Ошибка обработки: too_many_parameters"
+                notification.error_description = f"Превышено максимальное количество параметров: {len(parsed_qs)} > {max_params}"
                 notification.processed_at = timezone.now()
                 notification.save()
-                logger.warning(f"Ошибка обработки: too_many_parameters")
+                logger.warning(f"Webhook {notification.id}: слишком много параметров")
                 return
 
-            # 4. БЕЗОПАСНОЕ ПРЕОБРАЗОВАНИЕ С ОГРАНИЧЕНИЯМИ
+            # 4. БЕЗОПАСНОЕ ПРЕОБРАЗОВАНИЕ
             result = {}
-
             for key, values in parsed_qs.items():
                 # Ограничение длины ключа
                 if len(key) > 100:
                     continue
 
-                if values:  # Ограничение длины значения
+                if values:
                     value = values[0]
 
-                    # 5. БЕЗОПАСНЫЙ ПАРСИНГ
+                    # БЕЗОПАСНЫЙ ПАРСИНГ ВЛОЖЕННОГО JSON
                     if key in ['payload', 'data', 'json']:
-                        # Увеличиваем лимит для JSON
-                        if len(value) <= 10000:
-                            # БЕЗОПАСНЫЙ JSON ПАРСИНГ
-                            if value.strip().startswith('{'):
+                        if len(value) <= 5000:  # Лимит для JSON
+                            if value.strip().startswith('{') or value.strip().startswith('['):
                                 try:
                                     parsed_json = json.loads(value)
                                     if cls.is_safe_json_structure(parsed_json, max_depth=5):
                                         result[key] = parsed_json
                                     else:
-                                        result[key] = value
+                                        result[key] = value[:1000]  # Обрезаем слишком сложные структуры
                                 except json.JSONDecodeError:
-                                    result[key] = value
+                                    result[key] = value[:1000]
                     else:
-                        # Для обычных полей оставляем старый лимит
+                        # Для обычных полей
                         if len(value) <= 1000:
                             result[key] = value
 
-            # 6. СОХРАНЕНИЕ РЕЗУЛЬТАТА
+            # 5. СОХРАНЕНИЕ РЕЗУЛЬТАТА
             notification.parsed_body = result
             notification.status = 'complete'
             notification.processed_at = timezone.now()
             notification.save()
+            logger.info(f"Webhook {notification.id}: успешно обработан (form-data)")
 
         except Exception as err:
             notification.status = 'error'
-            notification.error_description = f"Не удалось выполнить преобразование представления данных: {str(err)}"
+            notification.error_description = f"Ошибка парсинга form-data: {str(err)}"
             notification.processed_at = timezone.now()
             notification.save()
-            logger.warning(f"Не удалось выполнить преобразование представления данных: {str(err)}")
+            logger.error(f"Webhook {notification.id}: ошибка парсинга form-data: {str(err)}")
+
+    @classmethod
+    def safe_parse_json_data(cls, notification, max_size=10000):
+        """
+        Безопасный парсинг JSON данных
+        """
+        try:
+            # 1. ПРОВЕРКА РАЗМЕРА
+            body = notification.data
+            if len(body) > max_size:
+                notification.status = 'error'
+                notification.error_description = f"Превышен максимальный размер JSON: {len(body)} > {max_size}"
+                notification.processed_at = timezone.now()
+                notification.save()
+                logger.warning(f"Webhook {notification.id}: превышен размер JSON")
+                return
+
+            # 2. ПАРСИНГ JSON
+            if body.strip():
+                parsed_data = json.loads(body)
+
+                # 3. ПРОВЕРКА СТРУКТУРЫ JSON
+                if not cls.is_safe_json_structure(parsed_data, max_depth=10):
+                    notification.status = 'error'
+                    notification.error_description = "Слишком сложная структура JSON"
+                    notification.processed_at = timezone.now()
+                    notification.save()
+                    logger.warning(f"Webhook {notification.id}: слишком сложная JSON структура")
+                    return
+
+                # 4. СОХРАНЕНИЕ РЕЗУЛЬТАТА
+                notification.parsed_body = parsed_data
+                notification.status = 'complete'
+                notification.processed_at = timezone.now()
+                notification.save()
+                logger.info(f"Webhook {notification.id}: успешно обработан (JSON)")
+            else:
+                # Пустой JSON
+                notification.parsed_body = {}
+                notification.status = 'complete'
+                notification.processed_at = timezone.now()
+                notification.save()
+
+        except json.JSONDecodeError as err:
+            notification.status = 'error'
+            notification.error_description = f"Невалидный JSON: {str(err)}"
+            notification.processed_at = timezone.now()
+            notification.save()
+            logger.warning(f"Webhook {notification.id}: невалидный JSON: {str(err)}")
+        except Exception as err:
+            notification.status = 'error'
+            notification.error_description = f"Ошибка парсинга JSON: {str(err)}"
+            notification.processed_at = timezone.now()
+            notification.save()
+            logger.error(f"Webhook {notification.id}: ошибка парсинга JSON: {str(err)}")
 
     @classmethod
     def is_safe_json_structure(cls, data, max_depth=5, current_depth=0):
         """
-        Проверка, что JSON не слишком сложный/глубокий
+        Проверка, что JSON не слишком сложный/глубокий для безопасности
         """
-
         if current_depth > max_depth:
             return False
 
         if isinstance(data, dict):
+            # Ограничение количества ключей в объекте
+            if len(data) > 100:
+                return False
+
             for value in data.values():
                 if not cls.is_safe_json_structure(value, max_depth, current_depth + 1):
                     return False
+
         elif isinstance(data, list):
+            # Ограничение длины массива
+            if len(data) > 1000:
+                return False
+
             for item in data:
                 if not cls.is_safe_json_structure(item, max_depth, current_depth + 1):
                     return False
@@ -118,275 +175,83 @@ class WebhookProcessor:
         return True
 
     @classmethod
-    def parse_notification_data(cls, notification):
+    def validate_content_type(cls, content_type):
         """
-        Разбираем структуру данных из уведомлений.
-        Возвращаем разобранные данные или None, если не JSON.
+        Валидация Content-Type
         """
-        try:
-            if notification.data:
-                return json.loads(notification.data)
-            return None
-        except (json.JSONDecodeError, TypeError) as err:
-            logger.warning(f"Уведомление {notification.id} - невалидный JSON: {str(err)}")
-            return None
+        allowed_content_types = [
+            'application/json',
+            'application/x-www-form-urlencoded'
+        ]
 
-    @classmethod
-    def validate_password(cls, parsed_data):
-        """
-        Проверка пароля
-        """
-        if not parsed_data or not isinstance(parsed_data, dict):
-            return False
-
-        # Проверяем различные возможные названия поля с паролем
-        password_fields = ['subscriptionPassword', 'password', 'secret', 'token']
-
-        for field in password_fields:
-            password = parsed_data.get(field)
-            if password and password == REQUIRED_PASSWORD:
-                return True
-
+        if content_type:
+            content_type = content_type.split(';')[0].strip().lower()
+            return content_type in allowed_content_types
         return False
 
     @classmethod
-    def extract_business_data(cls, parsed_data):
+    def validate_data_size(cls, data, max_size=10000):
         """
-        Извлекаем данные после проверки пароля
+        Валидация размера данных
         """
-        if not parsed_data or not isinstance(parsed_data, dict):
-            return {}
-
-        business_data = {}
-
-        # Извлекаем guest_id из различных возможных полей
-        guest_id_fields = ['customerId', 'guest_id', 'guestId', 'customer_id']
-        for field in guest_id_fields:
-            if field in parsed_data:
-                business_data['guest_id'] = parsed_data[field]
-                break
-
-        # Извлекаем баланс
-        balance_fields = ['balance', 'total_balance', 'totalBalance']
-        for field in balance_fields:
-            if field in parsed_data:
-                try:
-                    business_data['balance'] = float(parsed_data[field])
-                    break
-                except (ValueError, TypeError):
-                    continue
-
-        # Извлекаем venue_id
-        venue_fields = ['organizationId', 'venue_id', 'venueId', 'organization_id']
-        for field in venue_fields:
-            if field in parsed_data:
-                business_data['venue_id'] = parsed_data[field]
-                break
-
-        # Извлекаем имя гостя
-        name_fields = ['guest_name', 'guestName', 'name']
-        for field in name_fields:
-            if field in parsed_data:
-                business_data['guest_name'] = parsed_data[field]
-                break
-
-        # Если есть текст - пытаемся извлечь данные из текста
-        if 'text' in parsed_data:
-            text = parsed_data['text']
-            # Извлечение баланса из текста
-            if 'Итоговый Баланс (Guest.TotalBalance):' in text:
-                try:
-                    balance_part = text.split('Итоговый Баланс (Guest.TotalBalance):')[-1].split('\n')[0].strip()
-                    balance_part = balance_part.replace(',', '').replace(' ', '')
-                    business_data['balance'] = float(balance_part)
-                except (ValueError, IndexError):
-                    pass
-
-            # Извлечение имени из текста
-            if 'Имя (Guest.Name):' in text:
-                try:
-                    name_part = text.split('Имя (Guest.Name):')[-1].split('\n')[0].strip()
-                    business_data['guest_name'] = name_part
-                except IndexError:
-                    pass
-
-        return business_data
+        return len(data) <= max_size
 
     @classmethod
     def process_single_notification(cls, notification):
         """
-        Обработка одного уведомления - ВСЯ логика здесь
+        Основной метод обработки уведомления - ТОЛЬКО ПАРСИНГ И ВАЛИДАЦИЯ
         """
         logger.info(f"Начало обработки уведомления {notification.id}")
 
         try:
-            # 1. Разбираем полученную структуру данных
-            # ВСЕГДА обрабатываем form-data в фоне
-            if 'application/x-www-form-urlencoded' in notification.content_type:
-                # Формат form-urlencoded - безопасный парсинг
+            # 1. ВАЛИДАЦИЯ CONTENT-TYPE
+            if not cls.validate_content_type(notification.content_type):
+                notification.status = 'error'
+                notification.error_description = f"Неподдерживаемый Content-Type: {notification.content_type}"
+                notification.processed_at = timezone.now()
+                notification.save()
+                logger.warning(f"Webhook {notification.id}: неподдерживаемый Content-Type")
+                return
+
+            # 2. ВАЛИДАЦИЯ РАЗМЕРА ДАННЫХ
+            if not cls.validate_data_size(notification.data):
+                notification.status = 'error'
+                notification.error_description = f"Превышен максимальный размер данных"
+                notification.processed_at = timezone.now()
+                notification.save()
+                logger.warning(f"Webhook {notification.id}: превышен размер данных")
+                return
+
+            # 3. ПАРСИНГ В ЗАВИСИМОСТИ ОТ CONTENT-TYPE
+            content_type = notification.content_type.split(';')[0].strip().lower()
+
+            if content_type == 'application/x-www-form-urlencoded':
                 cls.safe_parse_form_data(notification)
-            #parsed_data = cls.parse_notification_data(notification)
-
-            # 2. Проверяем пароль
-            #if not cls.validate_password(parsed_data):
-            #    notification.status = 'error'
-            #    notification.error_description = 'Неверный или отсутствующий пароль'
-            #    notification.processed_at = timezone.now()
-            #    notification.save()
-            #    logger.warning(f"Уведомление {notification.id} - неверный пароль")
-            #    return
-
-            # 3. Извлекаем бизнес-данные (только после проверки пароля)
-            #business_data = cls.extract_business_data(parsed_data)
-
-            # 4. Определяем тип обработки по пути
-            #if '/balance/' in notification.path:
-            #    cls.process_balance_notification(notification, business_data, parsed_data)
-            #elif '/category/' in notification.path:
-            #    cls.process_category_notification(notification, business_data, parsed_data)
-            if '/Zr6mmitc9NdqtbdQJ5cBbgszyxvr0lg6' in notification.path:
-                cls.process_teletype_notification(notification)
+            elif content_type == 'application/json':
+                cls.safe_parse_json_data(notification)
             else:
-                cls.process_generic_notification(notification)
-
-        except Exception as err:
-            notification.status = 'error'
-            notification.error_description = f"Ошибка обработки: {str(err)}"
-            notification.processed_at = timezone.now()
-            notification.save()
-            logger.error(f"Ошибка обработки уведомления {notification.id}: {str(err)}")
-
-    @classmethod
-    def process_balance_notification(cls, notification, business_data, parsed_data):
-        """Обработка уведомления об изменении баланса"""
-        try:
-            logger.info(f"Обработка баланса для уведомления {notification.id}")
-
-            # Проверяем минимально необходимые данные
-            if not business_data.get('guest_id'):
+                # Для неизвестных типов просто сохраняем сырые данные
+                # notification.parsed_body = {"raw_data": notification.data[:1000]}  # Обрезаем для безопасности
+                # notification.status = 'complete'
+                # logger.info(f"Webhook {notification.id}: обработан как сырые данные")
+                notification.parsed_body = {}
                 notification.status = 'error'
-                notification.error_description = 'Отсутствует идентификатор гостя'
+                notification.error_description = f"Неизвестный тип content_type!"
                 notification.processed_at = timezone.now()
                 notification.save()
-                return
-
-            # ВАША БИЗНЕС-ЛОГИКА ЗДЕСЬ
-            # update_visit_history(
-            #     guest_id=business_data['guest_id'],
-            #     guest_name=business_data.get('guest_name', 'Неизвестно'),
-            #     venue_id=business_data.get('venue_id'),
-            #     balance=business_data.get('balance', 0),
-            #     raw_data=parsed_data
-            # )
-
-            logger.info(
-                f"Баланс гостя {business_data.get('guest_name', 'Неизвестно')} "
-                f"(ID: {business_data['guest_id']}) обновлен"
-            )
-
-            # Если все успешно - меняем статус
-            notification.status = 'complete'
-            notification.processed_at = timezone.now()
-            notification.save()
-
-            logger.info(f"Уведомление {notification.id} успешно обработано")
+                logger.error(f"Неизвестный тип content_type! при обработки уведомления {notification.id}")
 
         except Exception as err:
             notification.status = 'error'
-            notification.error_description = f"Ошибка обработки баланса: {str(err)}"
+            notification.error_description = f"Критическая ошибка обработки: {str(err)}"
             notification.processed_at = timezone.now()
             notification.save()
-            logger.error(f"Ошибка обработки баланса для {notification.id}: {str(err)}")
-
-    @classmethod
-    def process_category_notification(cls, notification, business_data, parsed_data):
-        """Обработка уведомления о категории гостя"""
-        try:
-            logger.info(f"Обработка категории для уведомления {notification.id}")
-
-            # Проверяем минимально необходимые данные
-            if not business_data.get('guest_id'):
-                notification.status = 'error'
-                notification.error_description = 'Отсутствует идентификатор гостя'
-                notification.processed_at = timezone.now()
-                notification.save()
-                return
-
-            # Определяем категорию
-            balance = business_data.get('balance', 0)
-            if balance > 20000:
-                category = "VIP"
-            elif balance > 10000:
-                category = "Постоянный клиент"
-            elif balance > 5000:
-                category = "Активный клиент"
-            else:
-                category = "Новый клиент"
-
-            # ВАША БИЗНЕС-ЛОГИКА ЗДЕСЬ
-            # assign_guest_to_category(
-            #     guest_id=business_data['guest_id'],
-            #     category=category,
-            #     balance=balance,
-            #     raw_data=parsed_data
-            # )
-
-            logger.info(
-                f"Гость {business_data.get('guest_name', 'Неизвестно')} "
-                f"(ID: {business_data['guest_id']}) определен в категорию: {category}"
-            )
-
-            # Если все успешно - меняем статус
-            notification.status = 'complete'
-            notification.processed_at = timezone.now()
-            notification.save()
-
-        except Exception as err:
-            notification.status = 'error'
-            notification.error_description = f"Ошибка обработки категории: {str(err)}"
-            notification.processed_at = timezone.now()
-            notification.save()
-            logger.error(f"Ошибка обработки категории для {notification.id}: {str(err)}")
-
-    @classmethod
-    def process_teletype_notification(cls, notification):
-        """Обработка уведомлений от Teletype"""
-        try:
-            logger.info(f"Обработка Teletype для уведомления {notification.id}")
-
-            # Если все успешно - меняем статус
-            notification.status = 'complete'
-            notification.processed_at = timezone.now()
-            notification.save()
-
-        except Exception as err:
-            notification.status = 'error'
-            notification.error_description = f"Ошибка обработки Teletype уведомления: {str(err)}"
-            notification.processed_at = timezone.now()
-            notification.save()
-
-    @classmethod
-    def process_generic_notification(cls, notification):
-        """Обработка уведомлений неизвестного типа"""
-        try:
-            logger.warning(f"Неизвестный тип уведомления {notification.id}")
-
-            # Просто логируем и отмечаем как завершенное
-            notification.status = 'complete'
-            notification.error_description = 'Неизвестный тип уведомления, данные сохранены'
-            notification.processed_at = timezone.now()
-            notification.save()
-
-        except Exception as err:
-            notification.status = 'error'
-            notification.error_description = f"Ошибка обработки generic уведомления: {str(err)}"
-            notification.processed_at = timezone.now()
-            notification.save()
+            logger.error(f"Критическая ошибка обработки уведомления {notification.id}: {str(err)}")
 
     @classmethod
     def process_pending_notifications(cls):
         """
-        Обработка ВСЕХ уведомлений со статусом 'новый'
+        Обработка всех уведомлений со статусом 'новый'
         """
         pending_notifications = WebhookRequest.objects.filter(status='new')
         total_count = pending_notifications.count()

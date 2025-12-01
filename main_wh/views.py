@@ -4,7 +4,7 @@ from rest_framework import status, generics
 from rest_framework.parsers import JSONParser, FormParser
 from rest_framework.response import Response
 
-from main_wh.models import WebhookRequest
+from main_wh.models import WebhookRequest, CategoryWebhook
 from main_wh.serializers import WebhookRequestSerializer
 from main_wh.permissions import WebhookPermission, HealthCheckPermission
 from main_wh.utils import get_client_ip
@@ -33,6 +33,27 @@ class WebhookRequestCreateAPIView(generics.CreateAPIView):
         """
         Переопределяем метод создания записей для реализации задуманной логики
         """
+
+        id_ext = kwargs.get('id_ext')
+
+        # Проверяем существование категории
+        try:
+            find_category = CategoryWebhook.get_active_by_external_id(id_ext)
+            if not find_category:
+                # Возвращаем 404 без деталей для безопасности
+                return Response(
+                    {"status": "error", "message": "Not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        except Exception as err:
+            # Записываем в журнал ошибку
+            logger.error(f"Ошибка при направлении Уведомления: {str(err)}")
+
+            # Любая ошибка - возвращаем 404
+            return Response(
+                {"status": "error", "message": "Not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         # ЯВНАЯ проверка Content-Type
         allowed_content_types = [
@@ -90,6 +111,7 @@ class WebhookRequestCreateAPIView(generics.CreateAPIView):
                 request_method=request.method,
                 full_url=request.build_absolute_uri(),
                 content_type=request.content_type,
+                category=find_category,
             )
 
             # Запуск обработки полученных данных через Celery
