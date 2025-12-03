@@ -33,7 +33,7 @@ services:
       - '5432:5432' # Доступ открыт в сеть
     healthcheck:
       test: ["CMD-SHELL", "PGPASSWORD=${DATABASES_PASSWORD} pg_isready -U ${DATABASES_USER} -d ${DATABASES_NAME}"]
-      interval: 30s
+      interval: 60s
       timeout: 10s
       retries: 3        # количество попыток
       start_period: 20s # начальный период
@@ -135,7 +135,7 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
+      interval: 60s
       timeout: 10s
       retries: 3
     networks:

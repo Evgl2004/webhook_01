@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 from os import getenv
 from dotenv import load_dotenv
+import re
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -41,6 +42,11 @@ ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS]
 # Настройки безопасности для работы через HTTPS
 SECURE_SSL_REDIRECT = True  # Перенаправлять все HTTP-запросы на HTTPS
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # Указывает Django, что запрос пришел по HTTPS
+# Исключить health из SSL редиректа (добавить перед INSTALLED_APPS)
+# Регулярное выражение для /health и /health/
+SECURE_REDIRECT_EXEMPT = [
+    re.compile(r'^health/?$'),
+]
 SESSION_COOKIE_SECURE = True  # Отправлять сессионные куки только по HTTPS
 CSRF_COOKIE_SECURE = True  # Отправлять CSRF-куки только по HTTPS
 USE_X_FORWARDED_HOST = False    # если нужен в сложных сценариях с несколькими прокси или особой маршрутизацией.
@@ -58,9 +64,15 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True  # Распространяет прави
 SECURE_HSTS_PRELOAD = True  # Позволяет включить домен в предзагрузку HSTS в браузерах
 
 # Блокировка User-Agent сканеров
+# Django CommonMiddleware проверяет User-Agent каждого запроса.
+# Для проверки используется метод .search() у объектов регулярных выражений.
 DISALLOWED_USER_AGENTS = [
-    'libredtail-http', 'zgrab', 'Go-http-client',
-    'sqlmap', 'nmap', 'nikto'
+    re.compile(r'libredtail-http'),
+    re.compile(r'zgrab'),
+    re.compile(r'Go-http-client'),
+    re.compile(r'sqlmap'),
+    re.compile(r'nmap'),
+    re.compile(r'nikto')
 ]
 
 # Без CORS браузер блокирует JavaScript запросы между разными доменами
@@ -285,7 +297,7 @@ REST_FRAMEWORK = {
         'anon': '50/hour',  # Общий лимит для анонимов
         'user': '500/hour',  # Общий лимит для пользователей
         'webhook': '500/hour',  # Специальный лимит для webhook
-        'healthcheck': '50/hour',  # Специальный лимит для healthcheck
+        'healthcheck': '150/hour',  # Специальный лимит для healthcheck
         # 'high_frequency': '100/minute',  # Для частых запросов
     }
 }

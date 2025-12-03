@@ -36,8 +36,8 @@ backup_method = postgres
 streaming_archiver = on
 slot_name = barman_slot
 archiver = off
-retention_policy = RECOVERY WINDOW OF 2 WEEKS
-minimum_redundancy = 2
+retention_policy = RECOVERY WINDOW OF 1 WEEKS
+minimum_redundancy = 7
 EOF
 #chown barman:barman /etc/barman/conf.d/db.conf
 
