@@ -273,7 +273,7 @@ services:
       - /var/log/webhook_app/barman:/var/log/barman
       - ./barman/scripts:/opt/barman-scripts:ro
       - ./barman/scripts/barman-logrotate.conf:/etc/logrotate.d/barman:ro
-      - ./barman/scripts/barman-crontab:/etc/cron.d/barman-custom:ro
+      - ./barman/scripts/barman-crontab:/etc/cron.d/barman:ro
     depends_on:
       db:
         condition: service_healthy
