@@ -27,7 +27,7 @@ services:
       - POSTGRES_SHARED_PRELOAD_LIBRARIES=pg_stat_statements
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
-      - ./barman-init-db.sh:/docker-entrypoint-initdb.d/barman-init-db.sh:ro
+      - ./barman/scripts/barman-init-db.sh:/docker-entrypoint-initdb.d/barman-init-db.sh:ro
     ports:
       # - '127.0.0.1:5432:5432' # Только локальный доступ
       - '5432:5432' # Доступ открыт в сеть
@@ -264,16 +264,21 @@ services:
       - BARMAN_PASSWORD=${BARMAN_PASSWORD}
       - STREAMING_BARMAN_USER=${STREAMING_BARMAN_USER}
       - STREAMING_BARMAN_PASSWORD=${STREAMING_BARMAN_PASSWORD}
+      - TZ=Asia/Yekaterinburg
+      -  LC_TIME=C.UTF-8
     volumes:
       - barman_data:/var/lib/barman
       - ./barman/barman.conf:/etc/barman/barman.conf:ro
       #- ./barman/conf.d:/etc/barman/conf.d:ro
       - /var/log/webhook_app/barman:/var/log/barman
       - ./barman/scripts:/opt/barman-scripts:ro
+      - ./barman/scripts/barman-logrotate.conf:/etc/logrotate.d/barman:ro
+      - ./barman/scripts/barman-crontab:/etc/cron.d/barman-custom:ro
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
+    init: true
     networks:
       - app_network
     command: ["/opt/barman-scripts/init-barman.sh"]
