@@ -4,7 +4,7 @@ FROM postgres:17.5
 
 # Устанавливаем Barman и необходимые зависимости
 RUN apt-get update && \
-    apt-get install -y barman && \
+    apt-get install -y barman cron logrotate && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -27,5 +27,6 @@ RUN mkdir -p /etc/barman/conf.d && \
     chown -R barman:barman /etc/barman
 
 # Переключаемся на пользователя barman
-USER barman
-WORKDIR /var/lib/barman
+# Запускаем контейнер под root, в скрипте инициализации init-barman.sh переключаем на пользователя barman
+# USER barman
+# WORKDIR /var/lib/barman
