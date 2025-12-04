@@ -1,0 +1,18 @@
+map $http_user_agent $blocked_agent {
+    default 0;
+    # Известные сканеры уязвимостей и хакерские инструменты
+    "~*(acunetix|appscan|arachni|blackwidow|burpsuite|dirbuster|dirbusterd|gobuster|havij|
+        hydra|jboss|masscan|metasploit|morfeus|nessus|netsparker|nikto|nmap|openvas|owasp|
+        paros|qualys|siclab|sqlmap|w3af|whatweb|zgrab)" 1;
+    # Боты и автоматические сканеры общего назначения
+    "~*(morfeus|siclab|blackwidow|bolt|cazoodlebot|chinaclaw|clshttp|custo|default|dibot|
+        disco|discobot|eCatch|ecxi|eirgrabber|emailcollector|emailsiphon|emailwolf|extractorpro|
+        eyenetie|flashget|getright|getweb|go!zilla|go-ahead-got-it|grabnet|grafula|heritrix|httrack|
+        ia_archiver|idbot|id-search|interget|internetseer|jetcar|larbin|leechftp|libwww|libwww-perl|
+        link|linksmanager|linkwalker|lwp-trivial|maxthon|microsoft\.url|microsoft|
+        mozilla\.*indy|mozilla\.*newt|msfrontpage|navroad|nearsite|netants|netspider|nutch|octopus|
+        pagegrabber|panscient|pavuk|peoplepal|phpcrawl|pleasecrawl|psbot|realdownload|reget|rippers|
+        sbider|seamonkey|sitesnagger|smartdownload|snoopy|spankbot|steeler|telesoft|turnitin|
+        urldispatcher|vci|voideye|webbandit|webcopy|webpictures|webreaper|websauger|website|
+        websucker|webwhacker|webzip|wget|widow|wwwster|xaldon|xenu|zeus|zyborg)" 1;
+}

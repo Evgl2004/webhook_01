@@ -8,4 +8,4 @@ MAILTO=root
 # Ежедневная проверка в 04:00
 0 4 * * * barman /opt/barman-scripts/barman_wrapper.sh /var/log/barman/check.log /usr/bin/barman check db
 # Воскресная очистка старых бэкапов в 03:00
-0 3 * * 0 barman /opt/barman-scripts/barman_wrapper.sh /var/log/barman/cleanup.log /usr/bin/barman delete --force db oldest
+# 0 3 * * 0 barman /opt/barman-scripts/barman_wrapper.sh /var/log/barman/cleanup.log /usr/bin/barman delete --force db oldest
