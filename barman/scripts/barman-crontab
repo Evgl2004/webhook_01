@@ -1,10 +1,11 @@
 # /etc/cron.d/barman: crontab entries for the barman package
 # Этот файл заменяет стандартный из пакета, добавляя логирование.
 MAILTO=root
-* * * * * barman /opt/barman-scripts/barman_wrapper.sh /var/log/barman/cron.log /usr/bin/barma>
+# Формат: barman_wrapper.sh <лог_файл> <команда> [аргументы...]
+* * * * * barman /opt/barman-scripts/barman_wrapper.sh /var/log/barman/cron.log /usr/bin/barman cron
 # Ежедневное резервное копирование в 02:00
-0 2 * * * barman /opt/barman-scripts/barman_wrapper.sh /var/log/barman/backup.log /usr/bin/bar>
+0 2 * * * barman /opt/barman-scripts/barman_wrapper.sh /var/log/barman/backup.log /usr/bin/barman backup db
 # Ежедневная проверка в 04:00
-0 4 * * * barman /opt/barman-scripts/barman_wrapper.sh /var/log/barman/check.log /usr/bin/barm>
+0 4 * * * barman /opt/barman-scripts/barman_wrapper.sh /var/log/barman/check.log /usr/bin/barman check db
 # Воскресная очистка старых бэкапов в 03:00
-0 3 * * 0 barman /opt/barman-scripts/barman_wrapper.sh /var/log/barman/cleanup.log /usr/bin/ba>
+# 0 3 * * 0 barman /opt/barman-scripts/barman_wrapper.sh /var/log/barman/cleanup.log /usr/bin/barman delete --force db oldest

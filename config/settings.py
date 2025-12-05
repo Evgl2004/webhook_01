@@ -67,12 +67,18 @@ SECURE_HSTS_PRELOAD = True  # Позволяет включить домен в 
 # Django CommonMiddleware проверяет User-Agent каждого запроса.
 # Для проверки используется метод .search() у объектов регулярных выражений.
 DISALLOWED_USER_AGENTS = [
-    re.compile(r'libredtail-http'),
-    re.compile(r'zgrab'),
-    re.compile(r'Go-http-client'),
-    re.compile(r'sqlmap'),
-    re.compile(r'nmap'),
-    re.compile(r'nikto')
+    # Целевые парсеры и скрипты
+    re.compile(r'^cypex\.ai'),
+    re.compile(r'^libredtail-http'),
+    # Автоматизированные HTTP-клиенты (могут быть легитимными, будьте осторожны)
+    re.compile(r'^python-requests'),
+    re.compile(r'^Go-http-client'),
+    # re.compile(r'^curl'),
+    # Общие шаблоны (используйте, если хотите агрессивную блокировку)
+    re.compile(r'scanner', re.IGNORECASE),
+    re.compile(r'bot', re.IGNORECASE),
+    re.compile(r'crawler', re.IGNORECASE),
+    re.compile(r'spider', re.IGNORECASE),
 ]
 
 # Без CORS браузер блокирует JavaScript запросы между разными доменами
