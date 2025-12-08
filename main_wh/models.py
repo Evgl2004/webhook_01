@@ -4,6 +4,7 @@ from django.utils import timezone
 from datetime import datetime
 
 NULLABLE = {'null': True, 'blank': True}
+NULL_DATE = timezone.make_aware(datetime(1970, 1, 1, 0, 0, 0))
 
 
 class CategoryWebhook(models.Model):
@@ -81,10 +82,21 @@ class WebhookRequest(models.Model):
     STATUS_ERROR = 'error'
     STATUS_COMPLETE = 'complete'
 
+    STATUS_PENDING = 'pending'
+    STATUS_PROCESSING = 'processing'
+    STATUS_FAILED = 'failed'
+
     STATUS_REQUEST = (
         (STATUS_NEW, 'Новый'),
         (STATUS_ERROR, 'Ошибка'),
         (STATUS_COMPLETE, 'Завершено'),
+    )
+
+    STATUS_BUSINESS_REQUEST = (
+        (STATUS_PENDING, 'Ожидает обработки'),
+        (STATUS_PROCESSING, 'В обработке'),
+        (STATUS_COMPLETE, 'Обработано'),
+        (STATUS_FAILED, 'Ошибка обработки'),
     )
 
     # Основные реквизиты
@@ -108,12 +120,19 @@ class WebhookRequest(models.Model):
                               verbose_name='Статус обработки')
     error_description = models.TextField(max_length=5000, validators=[MaxLengthValidator(5000)], default='',
                                          verbose_name='Текст ошибки')
-    processed_at = models.DateTimeField(default=timezone.make_aware(datetime(1970, 1, 1, 0, 0, 0)),
-                                        verbose_name='ДатаВремя обработки')
+    processed_at = models.DateTimeField(default=NULL_DATE, verbose_name='ДатаВремя обработки')
 
     # Связь с категорией
     category = models.ForeignKey(CategoryWebhook, on_delete=models.PROTECT, related_name='webhook_requests',
                                  verbose_name='Категория')
+
+    # Атрибуты для бизнес-обработки
+    business_queued_at = models.DateTimeField(default=NULL_DATE, verbose_name='Дата отправки в бизнес-очередь')
+
+    business_processed_at = models.DateTimeField(default=NULL_DATE, verbose_name='Дата обработки бизнес-логикой')
+
+    business_status = models.CharField(max_length=20, choices=STATUS_BUSINESS_REQUEST, default=STATUS_PENDING,
+                                       verbose_name='Статус бизнес-обработки')
 
     class Meta:
         verbose_name = 'Входящее уведомление'
@@ -122,6 +141,7 @@ class WebhookRequest(models.Model):
         indexes = [
             models.Index(fields=['status', 'inserted_at']),
             models.Index(fields=['processed_at']),
+            models.Index(fields=['business_status', 'business_queued_at']),
         ]
 
     def __str__(self):
