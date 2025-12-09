@@ -20,7 +20,9 @@ def get_client_ip(request):
 
 
 class WebhookProcessor:
-    """Класс для безопасного парсинга и валидации входящих уведомлений"""
+    """
+    Класс для безопасного парсинга и валидации входящих уведомлений
+    """
 
     @classmethod
     def safe_parse_form_data(cls, notification, max_size=10000, max_params=50):

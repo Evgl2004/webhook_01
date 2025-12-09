@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 from os import getenv
 from dotenv import load_dotenv
+from datetime import timedelta
 import re
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -101,6 +102,8 @@ INSTALLED_APPS = [
     'main_wh',
     'rest_framework',
     'django_celery_beat',
+    'rest_framework_simplejwt',
+    'django_filters',
 ]
 
 MIDDLEWARE = [
@@ -222,6 +225,13 @@ if CACHE_ENABLED:
         }
     }
 
+# URL-адрес брокера сообщений
+# Например, Redis, который по умолчанию работает на порту 6379
+REDIS_QUEUE_URL = getenv('REDIS_QUEUE_URL', 'redis://localhost:6379/1')
+
+# URL-адрес брокера результатов, также Redis
+REDIS_QUEUE_NAME = getenv('REDIS_QUEUE_NAME', 'webhook_queue')
+
 # Настройки для Celery
 
 # URL-адрес брокера сообщений
@@ -281,9 +291,11 @@ CELERY_FLOWER_PORT = getenv('FLOWER_PORT', 5555)
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
+        'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
@@ -305,7 +317,57 @@ REST_FRAMEWORK = {
         'webhook': '500/hour',  # Специальный лимит для webhook
         'healthcheck': '150/hour',  # Специальный лимит для healthcheck
         # 'high_frequency': '100/minute',  # Для частых запросов
-    }
+    },
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+    ],
+}
+
+SIMPLE_JWT = {
+    # 1. ВРЕМЯ ЖИЗНИ ТОКЕНОВ
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),     # Короткий access-токен
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),        # Refresh-токен живет дольше
+    # 2. БЕЗОПАСНОСТЬ И РОТАЦИЯ (без blacklist)
+    'ROTATE_REFRESH_TOKENS': False,          # Автоматически обновлять refresh токен
+    'BLACKLIST_AFTER_ROTATION': False,       # Старый refresh токен попадает в черный список
+    'UPDATE_LAST_LOGIN': True,              # Обновление информации о последнем входе
+    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
+
+    # 3. КЛЮЧИ И АЛГОРИТМЫ
+    'ALGORITHM': 'HS256',                                   # Алгоритм подписи
+    'SIGNING_KEY': getenv('JWT_SECRET_KEY', SECRET_KEY),    # Секретный ключ для подписи
+    'VERIFYING_KEY': None,
+
+    # 4. ЗАГОЛОВКИ И CLAIMS
+    'AUTH_HEADER_TYPES': ('Bearer',),       # Тип авторизации в заголовке
+    'USER_ID_FIELD': 'id',                  # Какое поле в модели User использовать как ID
+    'USER_ID_CLAIM': 'user_id',             # Как это поле будет называться в токен
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+
+    # 5. ПРАВИЛА ВАЛИДАЦИИ
+    # Это значит: "Принимаем только Access Token, а не Refresh Token"
+    # Refresh Token используется ТОЛЬКО для /token/refresh/
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',       # Токена будет поле "token_type": "access" или "refresh"
+
+    # 7. JWT ID (для отслеживания токенов)
+    'JTI_CLAIM': 'jti',
+
+    # 8. МОДИФИЦИРОВАННЫЙ СЕРИАЛИЗАТОР (ВАЖНО!)
+    'TOKEN_OBTAIN_SERIALIZER': 'main_wh.serializers.CustomTokenObtainPairSerializer',
+}
+
+# Дополнительные настройки безопасности
+JWT_CONFIG = {
+    'ISSUER': 'webhook_service',  # Кто выпустил токен
+    'AUDIENCE': ['business_service', 'webhook_frontend'],  # Для кого предназначен
+    'REQUIRED_CLAIMS': [
+        'exp',        # Срок действия (обязательно)
+        'iat',        # Время выпуска (обязательно)
+        'user_id',    # ID пользователя
+        'service_type'  # Тип сервиса (наш модифицированный claim)
+    ],
+    'OPTIONAL_CLAIMS': ['iss', 'aud', 'username'],
 }
 
 LOGGING = {
