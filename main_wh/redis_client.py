@@ -3,6 +3,8 @@ from redis import from_url as redis_from_url
 from django.conf import settings
 from datetime import datetime, timezone
 
+from main_wh.conf import app_settings
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,7 @@ class RedisQueue:
         # Получение имени очереди из настроек Django
         # getattr получает значение REDIS_QUEUE_NAME из settings,
         # если его нет, используется значение по умолчанию 'webhook_queue'
-        self.queue_name = getattr(settings, 'REDIS_QUEUE_NAME', 'webhook_queue')
+        self.queue_name = app_settings.REDIS_QUEUE_NAME
 
     def _get_connection(self):
         """
@@ -31,7 +33,7 @@ class RedisQueue:
             # Если соединения нет, пытаемся установить
             try:
                 # Получение URL для подключения к Redis из настроек Django
-                redis_url = getattr(settings, 'REDIS_QUEUE_URL', 'redis://redis:6379/1')
+                redis_url = app_settings.REDIS_QUEUE_URL
 
                 # Создание клиента Redis из URL с дополнительными параметрами
                 self.redis_client = redis_from_url(

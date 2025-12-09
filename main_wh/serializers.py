@@ -158,3 +158,31 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         # Дополнительные claims
         token['user_id'] = user.id
         token['username'] = user.username
+
+        return token
+
+    def validate(self, attrs):
+        """
+        Переопределяем метод validate для корректного возврата токенов
+        """
+        try:
+            # Вызываем родительский метод
+            data = super().validate(attrs)
+
+            # Получаем токен
+            refresh = self.get_token(self.user)
+
+            # Добавляем кастомные данные в ответ
+            data.update({
+                'user_id': self.user.id,
+                'username': self.user.username,
+                'service_type': refresh['service_type'] if 'service_type' in refresh else 'regular_user',
+            })
+
+            return data
+
+        except Exception as err:
+            logger.error(f"Ошибка в CustomTokenObtainPairSerializer: {str(err)}")
+            raise serializers.ValidationError({
+                "detail": "Ошибка аутентификации"
+            })

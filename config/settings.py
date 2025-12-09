@@ -225,6 +225,13 @@ if CACHE_ENABLED:
         }
     }
 
+# URL-адрес брокера сообщений
+# Например, Redis, который по умолчанию работает на порту 6379
+REDIS_QUEUE_URL = getenv('REDIS_QUEUE_URL', 'redis://localhost:6379/1')
+
+# URL-адрес брокера результатов, также Redis
+REDIS_QUEUE_NAME = getenv('REDIS_QUEUE_NAME', 'webhook_queue')
+
 # Настройки для Celery
 
 # URL-адрес брокера сообщений
@@ -358,7 +365,7 @@ JWT_CONFIG = {
         'exp',        # Срок действия (обязательно)
         'iat',        # Время выпуска (обязательно)
         'user_id',    # ID пользователя
-        'service_type' # Тип сервиса (наш модифицированный claim)
+        'service_type'  # Тип сервиса (наш модифицированный claim)
     ],
     'OPTIONAL_CLAIMS': ['iss', 'aud', 'username'],
 }

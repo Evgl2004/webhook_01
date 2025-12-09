@@ -104,10 +104,6 @@ class InternalServiceJWT(JWTAuthentication):
             'aud': 'business_service',  # Аудитория (audience) токена
         }
 
-        # Проверка jti (JWT ID) против черного списка
-        if self._is_token_blacklisted(token.get('jti')):
-            raise AuthenticationFailed("Токен отозван")
-
         # Итерация по всем обязательным claims
         for claim_name, expected_value in required_claims.items():
             # Получение значения claim из токена
