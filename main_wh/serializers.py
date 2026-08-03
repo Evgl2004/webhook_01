@@ -9,6 +9,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class WebhookRequestSerializer(serializers.ModelSerializer):
     # Сериализатор для объектов Уведомлений, который ничего не показывает.
 
@@ -85,10 +86,9 @@ class WebhookRequestUpdateSerializer(serializers.ModelSerializer):
     Сериализатор только для обновления бизнес-статуса.
     Используется при PATCH/PUT-запросах для обновления статуса обработки.
     """
-
     class Meta:
         model = WebhookRequest
-        fields = ['business_processed_at', 'business_status']
+        fields = ['business_processed_at', 'business_status', 'error_description']
 
     def validate_business_status(self, value):
         """

@@ -3,7 +3,7 @@ set -e
 # Этот скрипт выполняется ОТ пользователя BARMAN (через USER в Dockerfile)
 
 # Устанавливаем корректный часовой пояс для всех процессов
-export TZ=Asia/Yekaterinburg
+export TZ=UTC
 export LC_TIME=C.UTF-8
 
 echo "$(date '+%Y-%m-%d %H:%M:%S'): [Barman] Запуск основных процессов..."

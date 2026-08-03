@@ -19,7 +19,7 @@ from django.urls import path, include
 from config.views import custom_404_view, custom_500_view
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('admin_wh/', admin.site.urls),
     path('', include('main_wh.urls', namespace='main_wh')),
 ]
 

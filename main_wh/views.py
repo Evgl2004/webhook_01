@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.permissions import IsAuthenticated
 
 from main_wh.models import WebhookRequest, CategoryWebhook
@@ -33,6 +34,8 @@ class WebhookRequestCreateAPIView(generics.CreateAPIView):
     permission_classes = [WebhookPermission]
     serializer_class = WebhookRequestSerializer
 
+    # Явно указываем класс регулирования throttling
+    throttle_classes = [ScopedRateThrottle]
     # Использует лимит 'webhook' из настроек throttling
     throttle_scope = 'webhook'
 
@@ -151,6 +154,8 @@ class HealthCheckAPIView(generics.RetrieveAPIView):
     # Ограничиваем только методом GET
     permission_classes = [HealthCheckPermission]
 
+    # Явно указываем класс регулирования throttling
+    throttle_classes = [ScopedRateThrottle]
     # Используем отдельный лимит для health-check
     throttle_scope = 'healthcheck'
 
@@ -210,6 +215,11 @@ class WebhookRequestListAPIView(generics.ListAPIView):
     # Сортировка по умолчанию (по убыванию даты вставки)
     ordering = ['-inserted_at']
 
+    # Явно указываем класс регулирования throttling
+    throttle_classes = [ScopedRateThrottle]
+    # Используем отдельный лимит для health-check
+    throttle_scope = 'internal_service'  # Использует лимит '10000/hour'
+
     # Метод получения QuerySet (набора данных) для этого представления
     def get_queryset(self):
         # Начинаем с менеджера модели
@@ -267,6 +277,11 @@ class WebhookRequestUpdateAPIView(generics.UpdateAPIView):
 
     # Разрешенные HTTP-методы (только PATCH, т.к. обновляем частично)
     http_method_names = ['patch']
+
+    # Явно указываем класс регулирования throttling
+    throttle_classes = [ScopedRateThrottle]
+    # Используем отдельный лимит для health-check
+    throttle_scope = 'internal_service'  # Использует лимит '10000/hour'
 
     def get_queryset(self):
         """
@@ -331,7 +346,7 @@ class WebhookQueueStatsAPIView(generics.RetrieveAPIView):
     # Метод обработки GET-запроса
     def get(self, request, *args, **kwargs):
         # Импорт здесь, чтобы избежать циклических импортов
-        from .redis_client import redis_queue
+        from main_wh.redis_client import redis_queue
 
         # Получаем статистику очереди из Redis-клиента
         stats = redis_queue.get_queue_stats()

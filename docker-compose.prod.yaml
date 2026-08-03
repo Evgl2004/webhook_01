@@ -1,0 +1,681 @@
+x-docker-logging: &docker-logging
+  driver: json-file
+  options:
+    max-size: "3m"
+    max-file: "20"
+
+services:
+  db:
+    image: postgres:17.5
+    environment:
+      - TZ=UTC
+      - POSTGRES_DB=${DATABASES_NAME}
+      - POSTGRES_USER=${DATABASES_USER}
+      - POSTGRES_PASSWORD=${DATABASES_PASSWORD}
+      - DATABASES_NAME=${DATABASES_NAME}
+      - DATABASES_USER=${DATABASES_USER}
+      - DATABASES_PASSWORD=${DATABASES_PASSWORD}
+      - POSTGRES_HOST_AUTH_METHOD=scram-sha-256
+      - POSTGRESQL_SHARED_BUFFERS=256MB
+      - POSTGRESQL_EFFECTIVE_CACHE_SIZE=1GB
+      - POSTGRESQL_WORK_MEM=16MB
+      - POSTGRESQL_MAINTENANCE_WORK_MEM=128MB
+      - BARMAN_PASSWORD=${BARMAN_PASSWORD}
+      - STREAMING_BARMAN_PASSWORD=${STREAMING_BARMAN_PASSWORD}
+      # Уровень детализации информации, записываемой в WAL.
+      - POSTGRES_WAL_LEVEL=replica
+      # Прямой указатель PostgreSQL включить механизм архивации WAL-файлов.
+      - POSTGRES_ARCHIVE_MODE=on
+      # Это команда, которую PostgreSQL выполняет для отправки каждого заполненного WAL-сегмента в архив.
+      # Максимальное количество одновременных подключений для отправки WAL-данных.
+      - POSTGRES_MAX_WAL_SENDERS=3
+      # Модуль pg_stat_statements, который собирает статистику по выполнению всех SQL-запросов в системе.
+      # Инструмент для анализа и оптимизации производительности БД.
+      - POSTGRES_SHARED_PRELOAD_LIBRARIES=pg_stat_statements
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - ./barman/scripts/barman-init-db.sh:/docker-entrypoint-initdb.d/barman-init-db.sh:ro
+    #ports:
+      # - '127.0.0.1:5432:5432' # Только локальный доступ
+      #- '5432:5432' # Доступ открыт в сеть
+    healthcheck:
+      test: ["CMD-SHELL", "PGPASSWORD=${DATABASES_PASSWORD} pg_isready -U ${DATABASES_USER} -d ${DATABASES_NAME}"]
+      interval: 60s
+      timeout: 10s
+      retries: 3        # количество попыток
+      start_period: 20s # начальный период
+    restart: unless-stopped
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  redis:
+    image: redis:7.0.1
+    environment:
+      - TZ=UTC
+    # Данные сохраняются в файл и восстанавливаются после перезапуска
+    # command: redis-server --appendonly yes
+    # # Данные ТОЛЬКО в памяти, теряются при перезапуске
+    command: redis-server #--appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # migrate_webhook_service
+  migrate-wh:
+    build: ./webhook_01
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+    command: >
+      bash -c "echo 'Ожидаем запуск PostgreSQL 20с... Waiting for PostgreSQL...' &&
+               sleep 20 &&
+               python manage.py migrate"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - app_network
+
+  # migrate_loyalty_service
+  migrate-bonus:
+    build: ./loyalty_service
+    env_file:
+      - ./loyalty_service/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=loyalty_viewer.settings
+    command: >
+      bash -c "echo 'Ожидаем запуск PostgreSQL 20с... Waiting for PostgreSQL...' &&
+               sleep 20 &&
+               python manage.py migrate"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - app_network
+
+  # createsuperuser_webhook_service:
+  createsu-wh:
+    build: ./webhook_01
+    env_file:
+      - ./webhook_01/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+    command: >
+      bash -c "python manage.py createsu"
+    depends_on:
+      migrate-wh:
+        condition: service_completed_successfully
+    restart: "no"
+    networks:
+      - app_network
+
+#  # createsuperuser_loyalty_service:
+#  createsu-bonus:
+#    build: ./loyalty_service
+#    env_file:
+#      - ./loyalty_service/.env
+#    environment:
+#      - DJANGO_SETTINGS_MODULE=loyalty_viewer.settings
+#    command: >
+#      bash -c "python manage.py createsu"
+#    depends_on:
+#      migrate-bonus:
+#        condition: service_completed_successfully
+#    restart: "no"
+#    networks:
+#      - app_network
+
+  # app_webhook_service
+  app-wh:
+    build: ./webhook_01
+    env_file:
+      - ./webhook_01/.env
+    environment:
+      - TZ=UTC
+      - DJANGO_SETTINGS_MODULE=config.settings
+    tty: true
+    command: >
+      gunicorn config.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers=3
+      --timeout 120
+      --max-requests 1000
+      --max-requests-jitter 100
+      --access-logfile -
+    volumes:
+      - /var/log/webhook_app/app:/app/logs  # логи на хосте
+      - /opt/webhook_app/static:/app/static  # статика на хосте
+      - /opt/webhook_app/media:/app/media    # медиа на хосте
+    #ports:
+      #- '8000:8000'
+    user: "1000:1000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate-wh:  # Ждем завершения миграций
+        condition: service_completed_successfully
+      createsu-wh: # добавляем зависимость от createsuperuser
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # celery-beat-setup_webhook_service:
+  task-setup-wh:
+    build: ./webhook_01
+    env_file:
+      - ./webhook_01/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+    command: python manage.py setup_celery_schedules
+    depends_on:
+      migrate-wh:
+        condition: service_completed_successfully
+    restart: "no"
+    profiles: ["setup"]
+    networks:
+      - app_network
+
+  # celery_webhook_service
+  worker-wh:
+    build: ./webhook_01
+    env_file:
+      - ./webhook_01/.env
+    environment:
+      - TZ=UTC
+      - DJANGO_SETTINGS_MODULE=config.settings
+    command: celery -A config worker --loglevel=info
+    volumes:
+      - ./webhook_01:/app
+      - /var/log/webhook_app/celery:/app/logs  # логи на хосте
+    user: "1000:1000"
+    depends_on:
+      migrate-wh:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "celery", "-A", "config", "inspect", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # celery-beat_webhook_service
+  task-wh:
+    build: ./webhook_01
+    environment:
+      - TZ=UTC
+    env_file:
+      - ./webhook_01/.env
+    command: >
+      bash -c "celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
+    volumes:
+      - ./webhook_01:/app
+      - /var/log/webhook_app/celery_beat:/app/logs  # логи на хосте
+    user: "1000:1000"
+    depends_on:
+      migrate-wh:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # app_loyalty_service
+  app-bonus:
+    build: ./loyalty_service
+    env_file:
+      - ./loyalty_service/.env
+    environment:
+      - TZ=UTC
+      - DJANGO_SETTINGS_MODULE=loyalty_viewer.settings
+    tty: true
+    command: >
+      gunicorn loyalty_viewer.wsgi:application
+      --bind 0.0.0.0:8001
+      --workers=3
+      --timeout 120
+      --max-requests 1000
+      --max-requests-jitter 100
+      --access-logfile -
+    volumes:
+      - /var/log/loyalty_app/app:/app/logs  # логи на хосте
+      - /opt/loyalty_app/static:/app/static  # статика на хосте
+      - /opt/loyalty_app/media:/app/media    # медиа на хосте
+    #ports:
+      #- '8001:8001'
+    user: "1000:1000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate-bonus:  # Ждем завершения миграций
+        condition: service_completed_successfully
+#      createsu-bonus: # добавляем зависимость от createsuperuser
+#        condition: service_completed_successfully
+    restart: unless-stopped
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+#      interval: 60s
+#      timeout: 10s
+#      retries: 3
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # app_loyalty_worker:
+  worker-bonus:
+    build: ./loyalty_service
+    env_file:
+      - ./loyalty_service/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=loyalty_viewer.settings
+      - TZ=UTC
+    command: python manage.py run_webhook_worker --verbose
+    volumes:
+      - /var/log/loyalty_app/worker:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+      app-bonus:  # Ждем, пока основное приложение поднимется
+        condition: service_started
+    restart: unless-stopped
+    stop_grace_period: 30s  # Дать время на graceful shutdown
+    healthcheck:
+      test: [ "CMD", "python", "manage.py", "run_webhook_worker", "--health-check" ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # app_loyalty_mailing_producer
+  mailing-bonus:
+    build: ./loyalty_service
+    env_file:
+      - ./loyalty_service/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=loyalty_viewer.settings
+      - TZ=UTC
+    command: python manage.py mailing_worker
+    volumes:
+      - /var/log/loyalty_app/mailing:/app/logs
+    user: "1000:1000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      app-bonus:
+        condition: service_started
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: [ "CMD", "python", "manage.py", "mailing_worker", "--health-check" ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # app_loyalty_dispatcher
+  dispatch-bonus:
+    build: ./loyalty_service
+    env_file:
+      - ./loyalty_service/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=loyalty_viewer.settings
+      - TZ=UTC
+    command: python manage.py dispatch_universal_tasks
+    volumes:
+      - /var/log/loyalty_app/dispatch:/app/logs
+    user: "1000:1000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      app-bonus:
+        condition: service_started
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: [ "CMD", "python", "manage.py", "dispatch_universal_tasks", "--health-check" ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # app_loyalty_sender_telegram
+  sender-telegram-bonus:
+    build: ./loyalty_service
+    env_file:
+      - ./loyalty_service/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=loyalty_viewer.settings
+      - TZ=UTC
+    command: python manage.py run_provider_worker --provider telegram
+    volumes:
+      - /var/log/loyalty_app/sender_telegram:/app/logs
+    user: "1000:1000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      app-bonus:
+        condition: service_started
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: [ "CMD", "python", "manage.py", "run_provider_worker", "--provider", "telegram", "--health-check" ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # app_loyalty_sender_max
+  sender-max-bonus:
+    build: ./loyalty_service
+    env_file:
+      - ./loyalty_service/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=loyalty_viewer.settings
+      - TZ=UTC
+    command: python manage.py run_provider_worker --provider max
+    volumes:
+      - /var/log/loyalty_app/sender_max:/app/logs
+    user: "1000:1000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      app-bonus:
+        condition: service_started
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: [ "CMD", "python", "manage.py", "run_provider_worker", "--provider", "max", "--health-check" ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # app_loyalty_sender_vk
+  sender-vk-bonus:
+    build: ./loyalty_service
+    env_file:
+      - ./loyalty_service/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=loyalty_viewer.settings
+      - TZ=UTC
+    command: python manage.py run_provider_worker --provider vk
+    volumes:
+      - /var/log/loyalty_app/sender_vk:/app/logs
+    user: "1000:1000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      app-bonus:
+        condition: service_started
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: [ "CMD", "python", "manage.py", "run_provider_worker", "--provider", "vk", "--health-check" ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # app_loyalty_uq_monitor
+  uq-monitor-bonus:
+    build: ./loyalty_service
+    env_file:
+      - ./loyalty_service/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=loyalty_viewer.settings
+      - TZ=UTC
+    command: python manage.py run_universal_queue_monitor
+    volumes:
+      - /var/log/loyalty_app/uq_monitor:/app/logs
+    user: "1000:1000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      app-bonus:
+        condition: service_started
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: [ "CMD", "python", "manage.py", "run_universal_queue_monitor", "--health-check" ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # app_loyalty_webhook_backfill
+  webhook-backfill-bonus:
+    build: ./loyalty_service
+    env_file:
+      - ./loyalty_service/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=loyalty_viewer.settings
+      - TZ=UTC
+    command: python manage.py run_olap_webhook_backfill --sleep-seconds=20 --notification-type=1
+    volumes:
+      - /var/log/loyalty_app/olap_backfill:/app/logs
+    user: "1000:1000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      app-bonus:
+        condition: service_started
+    restart: unless-stopped
+    stop_grace_period: 45s
+    healthcheck:
+      test: [ "CMD", "python", "manage.py", "run_olap_webhook_backfill", "--health-check" ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    profiles:
+      - backfill
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # app_loyalty_djangoq
+  task-bonus:
+    build: ./loyalty_service
+    env_file:
+      - ./loyalty_service/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=loyalty_viewer.settings
+      - TZ=UTC
+    command: python manage.py qcluster
+    volumes:
+      - /var/log/loyalty_app/djangoq:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      app-bonus:
+        condition: service_started
+    restart: unless-stopped
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  flower:
+    image: mher/flower:0.9.7
+    env_file:
+      - .env
+    environment:
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - FLOWER_PORT=${FLOWER_PORT}
+      - FLOWER_BASIC_AUTH=${FLOWER_USER}:${FLOWER_PASSWORD}
+    volumes:
+      - flower_data:/app/var
+    # Убираем проброс порта, так как теперь используем через nginx
+    #ports:
+    #  - "5555:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+      worker-wh:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://flower:5555/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    # не пробрасываем наружу, чтобы nginx мог подключиться к Flower:
+    expose:
+      - "5555"
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - ./certbot-www:/var/www/certbot
+    command: renew --quiet
+    restart: "no"
+    networks:
+      - app_network
+
+  nginx:
+    image: nginx:1.25-alpine
+    environment:
+      - TZ=UTC
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/options-ssl-nginx.conf:/etc/nginx/options-ssl-nginx.conf:ro  # Для дополнительных SSL-настроек
+      - ./nginx/block_user_agents.map:/etc/nginx/conf.d/block_user_agents.map:ro
+      - ./nginx/private:/etc/nginx/private:ro # Монтируем директорию с закрытыми списками разрешённых IP-адресов
+      - /etc/letsencrypt:/etc/letsencrypt:ro  # Монтируем директорию с сертификатами
+      - ./certbot-www:/var/www/certbot:ro  # Для прохождения проверки Certbot
+      - /opt/webhook_app/static:/app/static/webhook:ro
+      - /opt/webhook_app/media:/app/media/webhook:ro
+      - /opt/loyalty_app/static:/app/static/loyalty:ro
+      - /opt/loyalty_app/media:/app/media/loyalty:ro
+      - /var/log/nginx:/var/log/nginx
+      - ./docs:/var/www/sagur_project/docs:ro
+    depends_on:
+      - app-wh
+      - app-bonus
+      - flower
+    restart: unless-stopped
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  barman:
+    build:
+      context: .
+      dockerfile: Dockerfile.barman
+    environment:
+      - TZ=UTC
+      - LC_TIME=C.UTF-8
+      - BARMAN_CONFIG_FILE=/etc/barman/barman.conf
+      - BARMAN_CONFIGURATION_FILES_DIRECTORY=/etc/barman/conf.d
+      - POSTGRES_HOST=${DATABASES_HOST}
+      - POSTGRES_PORT=${DATABASES_PORT}
+      - POSTGRES_DB=${DATABASES_NAME}
+      - BARMAN_USER=${BARMAN_USER}
+      - BARMAN_PASSWORD=${BARMAN_PASSWORD}
+      - STREAMING_BARMAN_USER=${STREAMING_BARMAN_USER}
+      - STREAMING_BARMAN_PASSWORD=${STREAMING_BARMAN_PASSWORD}
+    volumes:
+      - barman_data:/var/lib/barman
+      - ./barman/barman.conf:/etc/barman/barman.conf:ro
+      #- ./barman/conf.d:/etc/barman/conf.d:ro
+      - /var/log/webhook_app/barman:/var/log/barman
+      - ./barman/scripts:/opt/barman-scripts:ro
+      - ./barman/scripts/barman-logrotate.conf:/etc/logrotate.d/barman:ro
+      - ./barman/scripts/barman-crontab:/etc/cron.d/barman:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    logging: *docker-logging
+    networks:
+      - app_network
+    command: ["/opt/barman-scripts/init-barman.sh"]
+
+volumes:
+  postgres_prod_data:
+    external: true
+  redis_data:
+  flower_data:
+  barman_data:
+
+networks:
+  app_network:
+    driver: bridge
+    name: webhook_app_network
+    ipam:
+      driver: default
+      config:
+        - subnet: "10.20.0.0/16"
+          gateway: "10.20.0.1"
