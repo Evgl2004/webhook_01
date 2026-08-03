@@ -36,7 +36,7 @@ class WebhookUpdatePermission(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method == 'PATCH':
             # Разрешаем обновлять только business_* поля
-            allowed_fields = {'business_processed_at', 'business_status'}
+            allowed_fields = {'business_processed_at', 'business_status', 'error_description'}
             actual_fields = set(request.data.keys())
 
             # Проверяем, что запрос пытается изменить только разрешенные поля

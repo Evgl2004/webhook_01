@@ -2,6 +2,7 @@ services:
   db:
     image: postgres:17.5
     environment:
+      - TZ=UTC
       - POSTGRES_DB=${DATABASES_NAME}
       - POSTGRES_USER=${DATABASES_USER}
       - POSTGRES_PASSWORD=${DATABASES_PASSWORD}
@@ -43,6 +44,8 @@ services:
 
   redis:
     image: redis:7.0.1
+    environment:
+      - TZ=UTC
     # Данные сохраняются в файл и восстанавливаются после перезапуска
     # command: redis-server --appendonly yes
     # # Данные ТОЛЬКО в памяти, теряются при перезапуске
@@ -108,6 +111,7 @@ services:
     env_file:
       - .env
     environment:
+      - TZ=UTC
       - DJANGO_SETTINGS_MODULE=config.settings
     tty: true
     command: >
@@ -146,6 +150,7 @@ services:
     env_file:
       - .env
     environment:
+      - TZ=UTC
       - DJANGO_SETTINGS_MODULE=config.settings
     command: celery -A config worker --loglevel=info
     volumes:
@@ -170,6 +175,8 @@ services:
 
   celery-beat:
     build: .
+    environment:
+      - TZ=UTC
     env_file:
       - .env
     command: >
@@ -232,6 +239,8 @@ services:
 
   nginx:
     image: nginx:1.25-alpine
+    environment:
+      - TZ=UTC
     ports:
       - '80:80'
       - '443:443'
@@ -240,6 +249,7 @@ services:
       - ./options-ssl-nginx.conf:/etc/nginx/options-ssl-nginx.conf:ro  # Для дополнительных SSL-настроек
       - /etc/letsencrypt:/etc/letsencrypt:ro  # Монтируем директорию с сертификатами
       - /tmp/acme-challenge:/tmp/acme-challenge  # Для прохождения проверки Certbot
+      - ./block_user_agents.map:/etc/nginx/conf.d/block_user_agents.map:ro
       - /opt/webhook_app/static:/app/static:ro
       - /opt/webhook_app/media:/app/media:ro
       - /var/log/webhook_app/nginx:/var/log/nginx
@@ -255,6 +265,8 @@ services:
       context: .
       dockerfile: Dockerfile.barman
     environment:
+      - TZ=UTC
+      - LC_TIME=C.UTF-8
       - BARMAN_CONFIG_FILE=/etc/barman/barman.conf
       - BARMAN_CONFIGURATION_FILES_DIRECTORY=/etc/barman/conf.d
       - POSTGRES_HOST=${DATABASES_HOST}
@@ -264,8 +276,6 @@ services:
       - BARMAN_PASSWORD=${BARMAN_PASSWORD}
       - STREAMING_BARMAN_USER=${STREAMING_BARMAN_USER}
       - STREAMING_BARMAN_PASSWORD=${STREAMING_BARMAN_PASSWORD}
-      - TZ=Asia/Yekaterinburg
-      -  LC_TIME=C.UTF-8
     volumes:
       - barman_data:/var/lib/barman
       - ./barman/barman.conf:/etc/barman/barman.conf:ro

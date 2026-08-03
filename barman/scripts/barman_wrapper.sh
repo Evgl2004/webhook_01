@@ -2,7 +2,9 @@
 # Универсальная обёртка. Использование:
 #   barman_wrapper.sh <лог_файл> <команда> [аргументы...]
 
-export TZ=Asia/Yekaterinburg
+export TZ=UTC
+export BARMAN_CONFIG_FILE=/etc/barman/barman.conf
+export BARMAN_CONFIGURATION_FILES_DIRECTORY=/etc/barman/conf.d
 
 LOG_FILE="$1"    # Первый аргумент — путь к лог-файлу
 shift            # Сдвигаем аргументы, чтобы $@ содержал только команду для выполнения

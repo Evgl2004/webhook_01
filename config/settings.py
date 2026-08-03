@@ -47,6 +47,8 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # Указыва�
 # Регулярное выражение для /health и /health/
 SECURE_REDIRECT_EXEMPT = [
     re.compile(r'^health/?$'),
+    re.compile(r'^api/internal/.*'),
+    re.compile(r'^api/token/?.*'),
 ]
 SESSION_COOKIE_SECURE = True  # Отправлять сессионные куки только по HTTPS
 CSRF_COOKIE_SECURE = True  # Отправлять CSRF-куки только по HTTPS
@@ -72,8 +74,9 @@ DISALLOWED_USER_AGENTS = [
     re.compile(r'^cypex\.ai'),
     re.compile(r'^libredtail-http'),
     # Автоматизированные HTTP-клиенты (могут быть легитимными, будьте осторожны)
-    re.compile(r'^python-requests'),
-    re.compile(r'^Go-http-client'),
+    # Временно отключает блокировку легитимных методов
+    # re.compile(r'^python-requests'),
+    # re.compile(r'^Go-http-client'),
     # re.compile(r'^curl'),
     # Общие шаблоны (используйте, если хотите агрессивную блокировку)
     re.compile(r'scanner', re.IGNORECASE),
@@ -83,11 +86,11 @@ DISALLOWED_USER_AGENTS = [
 ]
 
 # Без CORS браузер блокирует JavaScript запросы между разными доменами
-CORS_ALLOW_ALL_ORIGINS = False
+#CORS_ALLOW_ALL_ORIGINS = False
 
 # Защита от подделки межсайтовых запросов.
-CSRF_TRUSTED_ORIGINS = getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
-CSRF_TRUSTED_ORIGINS = [host.strip() for host in CSRF_TRUSTED_ORIGINS]
+#CSRF_TRUSTED_ORIGINS = getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
+#CSRF_TRUSTED_ORIGINS = [host.strip() for host in CSRF_TRUSTED_ORIGINS]
 
 # Application definition
 
@@ -194,8 +197,9 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'ru-ru'
 
+# Серверный часовой пояс Django
 TIME_ZONE = 'UTC'
-
+# Обязательно True для корректной работы с aware datetime
 USE_I18N = True
 
 USE_TZ = True
@@ -204,7 +208,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/webhook/'
+MEDIA_URL = '/media/webhook/'
 
 STATIC_ROOT = BASE_DIR / 'static'
 
@@ -242,7 +247,7 @@ CELERY_BROKER_URL = getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
 
 # Часовой пояс для работы Celery
-CELERY_TIMEZONE = 'Asia/Yekaterinburg'
+CELERY_TIMEZONE = 'UTC'
 
 # Проверяет базу данных на наличие новых задач каждые 60 секунд.
 CELERY_BEAT_MAX_LOOP_INTERVAL = 60
@@ -312,11 +317,11 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.ScopedRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '50/hour',  # Общий лимит для анонимов
-        'user': '500/hour',  # Общий лимит для пользователей
-        'webhook': '500/hour',  # Специальный лимит для webhook
-        'healthcheck': '150/hour',  # Специальный лимит для healthcheck
-        # 'high_frequency': '100/minute',  # Для частых запросов
+        'anon': '150/hour',  # Общий лимит для анонимов
+        'user': '1500/hour',  # Общий лимит для пользователей
+        'webhook': '1500/hour',  # Специальный лимит для webhook
+        'healthcheck': '300/hour',  # Специальный лимит для healthcheck
+        'internal_service': '10000/hour',  # Высокий лимит для внутренних сервисов
     },
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
@@ -379,15 +384,15 @@ LOGGING = {
     # Определяют формат вывода логов:
     'formatters': {
         'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'format': '{levelname} [{asctime}] {module} {process:d} {thread:d} {message}',
             'style': '{',
         },
         'simple': {
-            'format': '{levelname} {asctime} {message}',
+            'format': '{levelname} [{asctime}] {message}',
             'style': '{',
         },
         'detailed': {
-            'format': '{levelname} {asctime} {pathname}:{lineno} {module} {funcName} {process:d} {thread:d} {message}',
+            'format': '{levelname} [{asctime}] {pathname}:{lineno} {module} {funcName} {process:d} {thread:d} {message}',
             'style': '{',
         },
     },

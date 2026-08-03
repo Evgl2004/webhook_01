@@ -131,3 +131,6 @@ dmypy.json
 
 # Настройки подключения к базе данных
 database.ini
+
+# Приватные списки разрешённых IP для Nginx
+nginx/private/
