@@ -378,6 +378,68 @@ services:
     networks:
       - app_network
 
+  # Изолированный клиент Xray для исходящих запросов Telegram.
+  # Порт доступен только контейнерам внутренней сети и не публикуется на хосте.
+  xray-telegram:
+    image: ghcr.io/xtls/xray-core:26.3.27
+    volumes:
+      - /etc/sagur/xray-telegram:/usr/local/etc/xray:ro
+    restart: unless-stopped
+    stop_grace_period: 10s
+    healthcheck:
+      test: [ "CMD", "/usr/local/bin/xray", "run", "-test", "-confdir", "/usr/local/etc/xray" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *docker-logging
+    networks:
+      - app_network
+
+  # Изолированная публичная служба учёта переходов по ссылкам.
+  redirect-bonus:
+    build: ./loyalty_service
+    env_file:
+      - ./loyalty_service/.env.redirect-bonus
+    environment:
+      - TZ=UTC
+      - PYTHONDONTWRITEBYTECODE=1
+    command: >
+      gunicorn loyalty_viewer.redirect_wsgi:application
+      --bind 0.0.0.0:8002
+      --workers=2
+      --timeout=10
+      --graceful-timeout=5
+      --max-requests=1000
+      --max-requests-jitter=100
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    cpus: 0.50
+    mem_limit: 256m
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate-bonus:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 10s
+    healthcheck:
+      test: [ "CMD-SHELL", "curl --fail --silent --show-error --max-time 2 -H \"Host: $${ALLOWED_HOSTS%%,*}\" -H \"X-Forwarded-Proto: https\" http://127.0.0.1:8002/internal/health >/dev/null" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *docker-logging
+    networks:
+      - app_network
+
   # app_loyalty_sender_telegram
   sender-telegram-bonus:
     build: ./loyalty_service
@@ -386,6 +448,7 @@ services:
     environment:
       - DJANGO_SETTINGS_MODULE=loyalty_viewer.settings
       - TZ=UTC
+      - HTTPS_PROXY=http://xray-telegram:10809
     command: python manage.py run_provider_worker --provider telegram
     volumes:
       - /var/log/loyalty_app/sender_telegram:/app/logs
@@ -397,6 +460,8 @@ services:
         condition: service_healthy
       app-bonus:
         condition: service_started
+      xray-telegram:
+        condition: service_healthy
     restart: unless-stopped
     stop_grace_period: 30s
     healthcheck:
@@ -623,6 +688,7 @@ services:
     depends_on:
       - app-wh
       - app-bonus
+      - redirect-bonus
       - flower
     restart: unless-stopped
     logging: *docker-logging
